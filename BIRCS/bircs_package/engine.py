@@ -73,7 +73,7 @@ class DatabaseEngine:
 
     # --- LOGIN (With RFID Support!) ---\
     def authenticate_user(self, login_val, password=""):
-        """Verifies credentials OR RFID, and enforces Kapitan account suspensions"""
+        """Verifies credentials (Username OR Employee ID) OR RFID, and enforces suspensions"""
         try:
             from datetime import datetime
             conn = self.get_connection()
@@ -85,9 +85,10 @@ class DatabaseEngine:
                 query = "SELECT * FROM users WHERE rfid_code = %s OR employee_id = %s"
                 cursor.execute(query, (login_val, login_val))
             else:
-                # Normal manual login
-                query = "SELECT * FROM users WHERE username = %s AND password = %s"
-                cursor.execute(query, (login_val, password))
+                # Normal manual login!
+                # THE FIX: Now it checks if the text you typed matches EITHER the username OR the employee_id!
+                query = "SELECT * FROM users WHERE (username = %s OR employee_id = %s) AND password = %s"
+                cursor.execute(query, (login_val, login_val, password))
 
             user = cursor.fetchone()
 
