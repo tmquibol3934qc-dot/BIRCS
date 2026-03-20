@@ -50,16 +50,24 @@ class ResolutionPage:
         self.cases_container.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
     def load_pending_cases(self):
-        all_incidents = self.engine.get_all_incidents()
-        self.pending_incidents = [inc for inc in all_incidents if inc.get('status') in ['Pending', 'Urgent']]
+        # 1. Figure out exactly who is logged in right now
+        officer_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}".strip()
+        role = self.user.get('role', 'Staff')
 
-        # Sorting: Urgent (0) at the top, Pending (1) below
+        # 2. Ask the engine ONLY for cases assigned to this officer (or all if Kapitan)
+        my_incidents = self.engine.get_my_pending_cases(officer_name, role)
+
+        # 3. Make absolutely sure we only have Pending or Urgent cases
+        self.pending_incidents = [inc for inc in my_incidents if inc.get('status') in ['Pending', 'Urgent']]
+
+        # 4. Sorting: Urgent (0) at the top, Pending (1) below (Kept your sorting logic!)
         self.pending_incidents.sort(key=lambda x: (
             0 if x.get('status') == 'Urgent' else 1,
             x.get('exact_date', ''),
             x.get('exact_time', '')
         ))
 
+        # 5. Draw the list on the screen
         self.draw_case_list(self.pending_incidents)
 
     def filter_cases(self, *args):
