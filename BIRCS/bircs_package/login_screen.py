@@ -4,10 +4,9 @@ from PIL import Image
 import os
 
 try:
-    from bircs_package.signup_screen import SignupWindow
     from bircs_package.forgot_password import ForgotPasswordDialog
     from bircs_package.dashboard_screen import DashboardWindow
-    from bircs_package.admin_dashboard import AdminDashboardWindow  # <-- ADDED FOR KAPITAN ROUTING
+    from bircs_package.admin_dashboard import AdminDashboardWindow
 except ImportError:
     pass
 
@@ -60,7 +59,8 @@ class LoginWindow:
         logo_text.pack(side="left", padx=20, pady=10)
 
     def create_login_card(self):
-        card = ctk.CTkFrame(self.bg_label, fg_color="white", width=450, height=550, corner_radius=10)
+        # Made the card slightly shorter since we removed the Sign Up button!
+        card = ctk.CTkFrame(self.bg_label, fg_color="white", width=450, height=500, corner_radius=10)
         card.place(relx=0.5, rely=0.5, anchor="center")
         card.pack_propagate(False)
 
@@ -79,7 +79,6 @@ class LoginWindow:
             pady=(0, 20))
 
         self.user_entry = self.create_input_field(card, "Enter ID or tap RFID", icon="👤")
-        # TAP & GO BINDING
         self.user_entry.bind('<Return>', lambda event: self.handle_login())
 
         self.pass_entry, self.eye_btn = self.create_password_field(card, "Enter your password")
@@ -104,12 +103,6 @@ class LoginWindow:
                                   fg_color=self.color_orange, hover_color="#C67B1D",
                                   font=(self.ui_font, 14, "bold"))
         login_btn.pack(pady=10)
-
-        signup_lbl = ctk.CTkLabel(card, text="Don't have an account? Sign Up",
-                                  font=(self.ui_font, 11), text_color="gray", cursor="hand2")
-        signup_lbl.pack(pady=(10, 0))
-        signup_lbl.bind("<Button-1>", lambda e: self.open_signup())
-
         self.user_entry.focus_set()
 
     def create_input_field(self, parent, placeholder, icon):
@@ -145,7 +138,6 @@ class LoginWindow:
             entry.configure(show='*')
             btn.configure(text="👁")
 
-    # --- UPGRADED LOGIN LOGIC ---
     def handle_login(self):
         u = self.user_entry.get().strip()
         p = self.pass_entry.get().strip()
@@ -154,22 +146,18 @@ class LoginWindow:
             messagebox.showwarning("Input Error", "Please enter your Username, ID, or tap RFID.")
             return
 
-        # Uses the unified authenticate_user function!
         auth_result = self.engine.authenticate_user(u, p)
 
         if auth_result.get("success"):
             user_data = auth_result.get("user_data")
-
             role = user_data.get('role', 'Staff')
             fname = user_data.get('first_name', '')
             lname = user_data.get('last_name', '')
 
             messagebox.showinfo("Login Success", f"Welcome back, {role.title()} {fname} {lname}!")
-
             self.root.withdraw()
 
             try:
-                # Routes Kapitan to Admin page, Staff to Dashboard
                 if role.lower() == "kapitan" or role.lower() == "admin":
                     self.admin_window = AdminDashboardWindow(self.engine, user_data, parent_dashboard=self)
                 else:
@@ -177,9 +165,7 @@ class LoginWindow:
             except Exception as e:
                 print(f"Dashboard Error: {e}")
                 self.root.deiconify()
-
         else:
-            # Displays the exact Suspended Timer or Blocked message
             error_message = auth_result.get("message", "Invalid Credentials or Unregistered RFID.")
             messagebox.showerror("Login Failed", error_message)
             self.pass_entry.delete(0, 'end')
@@ -197,18 +183,10 @@ class LoginWindow:
     def close_app(self):
         self.root.destroy()
 
-    def open_signup(self):
-        try:
-            from bircs_package.signup_screen import SignupWindow
-            self.root.withdraw()
-            SignupWindow(self.root, self.engine)
-        except ImportError as e:
-            messagebox.showerror("Error", f"Could not find signup screen: {e}")
-
+    # THE FIX: Passed the engine into the ForgotPasswordDialog so it can read the DB
     def open_forgot_popup(self):
         try:
-            from bircs_package.forgot_password import ForgotPasswordDialog
-            ForgotPasswordDialog(self.root)
-        except ImportError:
-            from bircs.forgot_password import ForgotPasswordDialog
-            ForgotPasswordDialog(self.root)
+            from bircs_package.ForgotPasswordDialog import ForgotPasswordDialog
+            ForgotPasswordDialog(self.root, self.engine)
+        except ImportError as e:
+            messagebox.showerror("Error", f"Could not load Forgot Password screen: {e}")
