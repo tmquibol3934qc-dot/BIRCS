@@ -3,13 +3,6 @@ from tkinter import messagebox
 from PIL import Image
 import os
 
-try:
-    from bircs_package.forgot_password import ForgotPasswordDialog
-    from bircs_package.dashboard_screen import DashboardWindow
-    from bircs_package.admin_dashboard import AdminDashboardWindow
-except ImportError:
-    pass
-
 
 class LoginWindow:
     def __init__(self, root, auth_engine):
@@ -59,7 +52,7 @@ class LoginWindow:
         logo_text.pack(side="left", padx=20, pady=10)
 
     def create_login_card(self):
-        # Made the card slightly shorter since we removed the Sign Up button!
+        # Slightly shorter card since we removed the Sign Up button
         card = ctk.CTkFrame(self.bg_label, fg_color="white", width=450, height=500, corner_radius=10)
         card.place(relx=0.5, rely=0.5, anchor="center")
         card.pack_propagate(False)
@@ -103,6 +96,7 @@ class LoginWindow:
                                   fg_color=self.color_orange, hover_color="#C67B1D",
                                   font=(self.ui_font, 14, "bold"))
         login_btn.pack(pady=10)
+
         self.user_entry.focus_set()
 
     def create_input_field(self, parent, placeholder, icon):
@@ -138,6 +132,7 @@ class LoginWindow:
             entry.configure(show='*')
             btn.configure(text="👁")
 
+    # --- UPGRADED LOGIN LOGIC ---
     def handle_login(self):
         u = self.user_entry.get().strip()
         p = self.pass_entry.get().strip()
@@ -150,6 +145,7 @@ class LoginWindow:
 
         if auth_result.get("success"):
             user_data = auth_result.get("user_data")
+
             role = user_data.get('role', 'Staff')
             fname = user_data.get('first_name', '')
             lname = user_data.get('last_name', '')
@@ -157,14 +153,28 @@ class LoginWindow:
             messagebox.showinfo("Login Success", f"Welcome back, {role.title()} {fname} {lname}!")
             self.root.withdraw()
 
+            # --- THE BULLETPROOF IMPORTS FIX ---
             try:
                 if role.lower() == "kapitan" or role.lower() == "admin":
+                    try:
+                        from bircs_package.admin_dashboard import AdminDashboardWindow
+                    except ImportError:
+                        from admin_dashboard import AdminDashboardWindow
+
                     self.admin_window = AdminDashboardWindow(self.engine, user_data, parent_dashboard=self)
                 else:
+                    try:
+                        from bircs_package.dashboard_screen import DashboardWindow
+                    except ImportError:
+                        from dashboard_screen import DashboardWindow
+
                     self.dashboard = DashboardWindow(self.engine, user_data, on_logout=self.logout_user)
+
             except Exception as e:
                 print(f"Dashboard Error: {e}")
+                messagebox.showerror("Dashboard Error", f"Failed to load the dashboard: {e}")
                 self.root.deiconify()
+
         else:
             error_message = auth_result.get("message", "Invalid Credentials or Unregistered RFID.")
             messagebox.showerror("Login Failed", error_message)
@@ -183,10 +193,18 @@ class LoginWindow:
     def close_app(self):
         self.root.destroy()
 
-    # THE FIX: Passed the engine into the ForgotPasswordDialog so it can read the DB
     def open_forgot_popup(self):
         try:
-            from bircs_package.ForgotPasswordDialog import ForgotPasswordDialog
+            try:
+                from bircs_package.ForgotPasswordDialog import ForgotPasswordDialog
+            except ImportError:
+                from ForgotPasswordDialog import ForgotPasswordDialog
+
             ForgotPasswordDialog(self.root, self.engine)
-        except ImportError as e:
-            messagebox.showerror("Error", f"Could not load Forgot Password screen: {e}")
+
+        except TypeError as e:
+            print(f"Ghost File Error: {e}")
+            messagebox.showerror("Ghost File Detected",
+                                 "Python is reading an old version of forgot_password.py!\n\nPlease check your folders and delete any extra copies.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not load screen: {e}")
