@@ -407,7 +407,7 @@ class DatabaseEngine:
             return False
 
     def get_resolution_suggestion(self, new_narrative, zone):
-        """Uses NLP to find the Top 5 best matching past settlements"""
+        """Uses NLP to find the Top 5 best matching past settlements (40% match minimum)"""
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer
             from sklearn.metrics.pairwise import cosine_similarity
@@ -418,17 +418,17 @@ class DatabaseEngine:
             query = """
                     SELECT narrative, settlement_details
                     FROM incidents
-                    WHERE status = 'Resolved' \
+                    WHERE status = 'Resolved' 
                       AND zone = %s
-                      AND settlement_details IS NOT NULL \
-                      AND settlement_details != '' \
+                      AND settlement_details IS NOT NULL 
+                      AND settlement_details != '' 
                     """
             cursor.execute(query, (zone,))
             past_cases = cursor.fetchall()
             conn.close()
 
             if not past_cases:
-                return "No historical data available for this zone. Cannot generate a suggestion yet."
+                return []  # Return an empty list if there's no data
 
             narratives = [case['narrative'] for case in past_cases]
             narratives.append(new_narrative)
@@ -447,33 +447,30 @@ class DatabaseEngine:
 
             # Get the scores
             cosine_similarities = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1]).flatten()
-
-            # --- THE MAGIC FIX: Rank them and grab the Top 5! ---
-            # argsort() sorts lowest to highest. [::-1] flips it to highest to lowest. [:5] grabs the top 5!
             top_indices = cosine_similarities.argsort()[::-1][:5]
 
             suggestions = []
-            rank = 1
 
             for idx in top_indices:
                 score = cosine_similarities[idx]
-                # If the match is at least 5% similar, we include it!
-                if score > 0.05:
+
+                # --- THE 40% FIX: Only grab it if it's highly relevant! ---
+                if score >= 0.40:
                     pct = int(score * 100)
                     settlement = past_cases[idx]['settlement_details'].strip()
-                    suggestions.append(f"Option {rank} ({pct}% Match):\n{settlement}\n")
-                    rank += 1
 
-            if not suggestions:
-                return "This incident appears highly unique. No strong historical matches found."
+                    # Instead of a string, we pack it into a neat little dictionary
+                    suggestions.append({
+                        "match": pct,
+                        "text": settlement
+                    })
 
-            # Combine all the options into one giant text block
-            return "\n".join(suggestions)
+            return suggestions
 
         except Exception as e:
             print(f"\n--- MACHINE LEARNING ERROR ---")
             print(f"Details: {e}")
-            return "AI Engine is offline or missing libraries."
+            return []
 
     def get_next_case_id(self):
         """Peeks at the database to calculate what the next Case ID will be"""
