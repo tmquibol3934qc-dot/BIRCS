@@ -244,3 +244,49 @@ class ResolutionPage:
         except Exception as e:
             print(f"Save Error: {e}")
             messagebox.showwarning("Error", "Could not save resolution to database. Check terminal.")
+
+    def display_smart_suggestions(self, narrative, zone):
+        """Builds clickable AI suggestion cards"""
+        # 1. Clear out the old suggestions frame
+        for widget in self.suggestion_frame.winfo_children():
+            widget.destroy()
+
+        # 2. Ask the Engine for the list of dictionaries
+        suggestions = self.engine.get_resolution_suggestion(narrative, zone)
+
+        # 3. If nothing passed the 40% test, show a fallback message
+        if not suggestions:
+            ctk.CTkLabel(self.suggestion_frame,
+                         text="No strong matches found (>40%).\nPlease draft a custom settlement.",
+                         font=("Arial", 12, "italic"), text_color="gray").pack(pady=20)
+            return
+
+        # 4. Loop through the results and build a clickable card for each one!
+        for item in suggestions:
+            # The Card Container
+            card = ctk.CTkFrame(self.suggestion_frame, fg_color="#F0F8FF", border_color="#27AE60", border_width=1,
+                                corner_radius=8)
+            card.pack(fill="x", pady=5, padx=10)
+
+            # The Match % Header
+            header = ctk.CTkLabel(card, text=f"⚡ {item['match']}% Match", font=("Arial", 12, "bold"),
+                                  text_color="#27AE60")
+            header.pack(anchor="w", padx=10, pady=(5, 0))
+
+            # The Settlement Text (Wrapped so it doesn't break the UI)
+            text_lbl = ctk.CTkLabel(card, text=item['text'], font=("Arial", 11), text_color="#2B2B2B", wraplength=350,
+                                    justify="left")
+            text_lbl.pack(anchor="w", padx=10, pady=2)
+
+            # --- THE MAGIC BUTTON ---
+            # (Note: t=item['text'] is a special Python trick to make sure loops work with buttons!)
+            use_btn = ctk.CTkButton(card, text="Insert into Form", height=24, fg_color="#27AE60", hover_color="#1E8449",
+                                    font=("Arial", 11, "bold"),
+                                    command=lambda t=item['text']: self.insert_ai_suggestion(t))
+            use_btn.pack(anchor="e", padx=10, pady=(0, 5))
+
+    def insert_ai_suggestion(self, suggestion_text):
+        """Clears the current text box and pastes the AI suggestion in"""
+        # Assuming your main resolution text box is called 'self.resolution_input'
+        self.resolution_input.delete("1.0", "end")
+        self.resolution_input.insert("1.0", suggestion_text)
