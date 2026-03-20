@@ -580,3 +580,53 @@ class DatabaseEngine:
         except Exception as e:
             print(f"Error fetching pending cases: {e}")
             return []
+
+    # ==========================================
+    # FORGOT PASSWORD SYSTEM
+    # ==========================================
+    def get_user_security_questions(self, emp_id):
+        """Fetches the 3 security questions for a specific employee ID"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT q1, q2, q3 FROM users WHERE employee_id = %s OR username = %s", (emp_id, emp_id))
+            user = cursor.fetchone()
+            conn.close()
+            return user  # Returns the questions, or None if user doesn't exist
+        except Exception as e:
+            print(f"Error fetching questions: {e}")
+            return None
+
+    def verify_security_answers(self, emp_id, a1, a2, a3):
+        """Checks if the provided answers match the database (Case-Insensitive)"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT a1, a2, a3 FROM users WHERE employee_id = %s OR username = %s", (emp_id, emp_id))
+            user = cursor.fetchone()
+            conn.close()
+
+            if user:
+                # We use .lower() and .strip() so it doesn't fail if they accidentally capitalized a letter!
+                if (user['a1'].strip().lower() == a1.strip().lower() and
+                        user['a2'].strip().lower() == a2.strip().lower() and
+                        user['a3'].strip().lower() == a3.strip().lower()):
+                    return True
+            return False
+        except Exception as e:
+            print(f"Error verifying answers: {e}")
+            return False
+
+    def reset_user_password(self, emp_id, new_password):
+        """Saves the new password to the database"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET password = %s WHERE employee_id = %s OR username = %s",
+                           (new_password, emp_id, emp_id))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error resetting password: {e}")
+            return False
