@@ -188,12 +188,22 @@ class DatabaseEngine:
             return False, f"Database error: {e}"
 
     def get_all_incidents(self):
-        """Fetches all incidents from the database"""
+        """Fetches active incidents (Auto-Archives Resolved cases older than 30 days)"""
         try:
             conn = self.get_connection()
-            # dictionary=True makes it return data as {'case_no': '2026-123', 'status': 'Pending'} instead of raw tuples
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM incidents ORDER BY created_at DESC")
+
+            # --- THE TIME TRAVEL SQL TRICK ---
+            # It fetches everything that IS NOT Resolved.
+            # If it IS Resolved, it only fetches it if the created_at date is within the last 30 days!
+            query = """
+                SELECT * FROM incidents 
+                WHERE status != 'Resolved' 
+                   OR (status = 'Resolved' AND created_at >= NOW() - INTERVAL 30 DAY)
+                ORDER BY created_at DESC
+            """
+
+            cursor.execute(query)
             records = cursor.fetchall()
             conn.close()
             return records
@@ -549,3 +559,24 @@ class DatabaseEngine:
             print(f"Error updating user: {e}")
             return False
 
+    def get_my_pending_cases(self, officer_name, role):
+        """Fetches pending cases. Staff only see their own. Kapitan sees all."""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            if role.lower() in ['kapitan', 'admin']:
+                # Kapitan God Mode: Sees ALL pending cases to override if needed
+                query = "SELECT * FROM incidents WHERE status != 'Resolved' ORDER BY created_at DESC"
+                cursor.execute(query)
+            else:
+                # Normal Staff: Only sees cases they personally processed
+                query = "SELECT * FROM incidents WHERE status != 'Resolved' AND processed_by = %s ORDER BY created_at DESC"
+                cursor.execute(query, (officer_name,))
+
+            records = cursor.fetchall()
+            conn.close()
+            return records
+        except Exception as e:
+            print(f"Error fetching pending cases: {e}")
+            return []
