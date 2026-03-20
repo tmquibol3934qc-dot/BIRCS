@@ -527,28 +527,33 @@ class DatabaseEngine:
             print(f"Error fetching stats: {e}")
             return {"handled": 0, "resolved": 0}
 
-    def update_user_account(self, user_id, first_name, last_name, username, password, role, status, suspend_val=0,
-                            suspend_type="Hours"):
-        """Updates user details and calculates future suspension dates if needed"""
+        # THE FIX: Added 'rfid_code' to the arguments!
+
+    def update_user_account(self, user_id, first_name, last_name, employee_id, password, role, status, rfid_code,
+                            suspend_val=0, suspend_type="Hours"):
+        """Updates user details (including RFID) and calculates future suspension dates"""
         try:
+            from datetime import datetime, timedelta
             conn = self.get_connection()
             cursor = conn.cursor()
 
             suspend_until = None
 
-            # If they are suspended, calculate the exact date/time they are allowed back in
             if status == "Suspended":
                 if suspend_type == "Hours":
                     suspend_until = datetime.now() + timedelta(hours=int(suspend_val))
                 else:
                     suspend_until = datetime.now() + timedelta(days=int(suspend_val))
 
+            # THE FIX: Changed 'username' to 'employee_id' to perfectly match your database!
             query = """
                 UPDATE users 
-                SET first_name=%s, last_name=%s, username=%s, password=%s, role=%s, status=%s, suspension_until=%s
+                SET first_name=%s, last_name=%s, employee_id=%s, password=%s, role=%s, status=%s, suspension_until=%s, rfid_code=%s
                 WHERE id=%s
             """
-            cursor.execute(query, (first_name, last_name, username, password, role, status, suspend_until, user_id))
+
+            cursor.execute(query, (first_name, last_name, employee_id, password, role, status, suspend_until, rfid_code,
+                                   user_id))
             conn.commit()
             conn.close()
             return True
