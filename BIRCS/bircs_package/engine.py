@@ -161,31 +161,46 @@ class DatabaseEngine:
         except Exception as e:
             return False, f"Error: {e}"
 
-    def save_incident(self, case_no, comp_name, resp_name, contact, address, inc_date, inc_time, zone, narrative,
-                      processed_by, status):
-        """Saves a new incident blotter to the database"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
 
-            # Added 'status' to the INSERT columns and an extra %s to the VALUES
-            query = """
-                    INSERT INTO incidents
-                    (case_no, complainant_name, respondent_name, contact_number, last_known_address,
-                     date_of_incident, exact_time, zone, narrative, processed_by, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) \
-                    """
-            # Added status to the end of the values tuple
-            values = (case_no, comp_name, resp_name, contact, address, inc_date, inc_time, zone, narrative,
-                      processed_by, status)
+    def save_incident(self, comp, comp_contact, comp_address, resp, resp_contact, resp_address, date, time_str,
+                          zone, category, narrative, officer, status):
+            """Auto-generates Case ID and saves the complete blotter record"""
+            try:
+                from datetime import datetime
+                conn = self.get_connection()
+                cursor = conn.cursor(dictionary=True)
 
-            cursor.execute(query, values)
-            conn.commit()
-            conn.close()
-            return True, "Incident recorded successfully!"
+                current_year = datetime.now().year
+                cursor.execute("SELECT COUNT(*) as total FROM incidents WHERE YEAR(created_at) = %s", (current_year,))
+                result = cursor.fetchone()
+                next_number = result['total'] + 1
+                new_case_id = f"{current_year}-{next_number:03d}"
 
-        except Exception as e:
-            return False, f"Database error: {e}"
+                # THE FIX: Added category to the INSERT query!
+                query = """
+                    INSERT INTO incidents (
+                        case_no, complainant_name, complainant_contact, complainant_address, 
+                        respondent_name, respondent_contact, respondent_address, 
+                        date_of_incident, exact_time, zone, category, narrative, processed_by, status
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+
+                # THE FIX: Added category to the values tuple!
+                values = (
+                    new_case_id, comp, comp_contact, comp_address,
+                    resp, resp_contact, resp_address,
+                    date, time_str, zone, category, narrative, officer, status
+                )
+
+                cursor.execute(query, values)
+                conn.commit()
+                conn.close()
+
+                return True, new_case_id
+
+            except Exception as e:
+                print(f"Error saving incident: {e}")
+                return False, str(e)
 
     def get_all_incidents(self):
         """Fetches active incidents (Auto-Archives Resolved cases older than 30 days)"""
@@ -406,71 +421,66 @@ class DatabaseEngine:
             print(f"CRITICAL DB ERROR: {e}")
             return False
 
-    def get_resolution_suggestion(self, new_narrative, zone):
-        """Uses NLP to find the Top 5 best matching past settlements (40% match minimum)"""
-        try:
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            from sklearn.metrics.pairwise import cosine_similarity
 
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
+    def get_resolution_suggestion(self, new_narrative, zone, category):
+            """Uses NLP to find the best matching past settlements based on Zone and Category"""
+            try:
+                from sklearn.feature_extraction.text import TfidfVectorizer
+                from sklearn.metrics.pairwise import cosine_similarity
 
-            query = """
-                    SELECT narrative, settlement_details
-                    FROM incidents
-                    WHERE status = 'Resolved' 
-                      AND zone = %s
-                      AND settlement_details IS NOT NULL 
-                      AND settlement_details != '' 
-                    """
-            cursor.execute(query, (zone,))
-            past_cases = cursor.fetchall()
-            conn.close()
+                conn = self.get_connection()
+                cursor = conn.cursor(dictionary=True)
 
-            if not past_cases:
-                return []  # Return an empty list if there's no data
+                # THE FIX: We now filter by BOTH zone and category! This makes it way faster and more accurate!
+                query = """
+                        SELECT narrative, settlement_details
+                        FROM incidents
+                        WHERE status = 'Resolved' 
+                          AND zone = %s
+                          AND category = %s
+                          AND settlement_details IS NOT NULL 
+                          AND settlement_details != '' 
+                        """
+                cursor.execute(query, (zone, category))
+                past_cases = cursor.fetchall()
+                conn.close()
 
-            narratives = [case['narrative'] for case in past_cases]
-            narratives.append(new_narrative)
+                if not past_cases:
+                    return []  # Return empty if no cases match this zone/category combo
 
-            # Our custom Tagalog/English stop words!
-            custom_stop_words = [
-                "ang", "mga", "sa", "na", "ng", "ay", "at", "kung", "may",
-                "para", "naman", "ba", "ito", "iyon", "dito", "doon",
-                "pa", "ako", "ikaw", "siya", "kami", "kayo", "sila",
-                "din", "rin", "po", "opo", "ni", "nila", "namin", "ninyo", "niyo",
-                "the", "and", "is", "in", "to", "of", "it", "that", "this"
-            ]
+                narratives = [case['narrative'] for case in past_cases]
+                narratives.append(new_narrative)
 
-            vectorizer = TfidfVectorizer(stop_words=custom_stop_words)
-            tfidf_matrix = vectorizer.fit_transform(narratives)
+                custom_stop_words = [
+                    "ang", "mga", "sa", "na", "ng", "ay", "at", "kung", "may",
+                    "para", "naman", "ba", "ito", "iyon", "dito", "doon",
+                    "pa", "ako", "ikaw", "siya", "kami", "kayo", "sila",
+                    "din", "rin", "po", "opo", "ni", "nila", "namin", "ninyo", "niyo",
+                    "the", "and", "is", "in", "to", "of", "it", "that", "this"
+                ]
 
-            # Get the scores
-            cosine_similarities = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1]).flatten()
-            top_indices = cosine_similarities.argsort()[::-1][:5]
+                vectorizer = TfidfVectorizer(stop_words=custom_stop_words)
+                tfidf_matrix = vectorizer.fit_transform(narratives)
 
-            suggestions = []
+                cosine_similarities = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1]).flatten()
+                top_indices = cosine_similarities.argsort()[::-1][:5]
 
-            for idx in top_indices:
-                score = cosine_similarities[idx]
+                suggestions = []
+                for idx in top_indices:
+                    score = cosine_similarities[idx]
+                    if score >= 0.40:
+                        pct = int(score * 100)
+                        settlement = past_cases[idx]['settlement_details'].strip()
+                        suggestions.append({
+                            "match": pct,
+                            "text": settlement
+                        })
 
-                # --- THE 40% FIX: Only grab it if it's highly relevant! ---
-                if score >= 0.40:
-                    pct = int(score * 100)
-                    settlement = past_cases[idx]['settlement_details'].strip()
+                return suggestions
 
-                    # Instead of a string, we pack it into a neat little dictionary
-                    suggestions.append({
-                        "match": pct,
-                        "text": settlement
-                    })
-
-            return suggestions
-
-        except Exception as e:
-            print(f"\n--- MACHINE LEARNING ERROR ---")
-            print(f"Details: {e}")
-            return []
+            except Exception as e:
+                print(f"AI Search Error: {e}")
+                return []
 
     def get_next_case_id(self):
         """Peeks at the database to calculate what the next Case ID will be"""
@@ -632,3 +642,56 @@ class DatabaseEngine:
         except Exception as e:
             print(f"Error resetting password: {e}")
             return False
+
+    def get_incident_categories(self):
+        """Fetches a list of all unique categories ever typed into the system"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            # Grabs only unique categories, ignores blanks!
+            cursor.execute("SELECT DISTINCT category FROM incidents WHERE category IS NOT NULL AND category != ''")
+            results = cursor.fetchall()
+            conn.close()
+
+            # If the database has categories, return them. Otherwise, provide some defaults!
+            if results:
+                return [row[0] for row in results]
+            else:
+                return ["Theft", "Physical Assault", "Noise Complaint", "Property Damage", "Trespassing"]
+        except Exception as e:
+            print(f"Error fetching categories: {e}")
+            return ["Theft", "Physical Assault", "Noise Complaint", "Property Damage"]
+
+    def advanced_search_incidents(self, keyword="", category="All Categories"):
+        """Omni-Search: Scans Case IDs and Names simultaneously, filtered by Category"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            # Start with a base query
+            query = "SELECT * FROM incidents WHERE 1=1"
+            params = []
+
+            # 1. Apply the Omni-Search Keyword
+            if keyword and keyword.strip() != "":
+                kw = f"%{keyword.strip()}%"
+                # It checks the Case ID, the Complainant, AND the Respondent!
+                query += " AND (case_no LIKE %s OR complainant_name LIKE %s OR respondent_name LIKE %s)"
+                params.extend([kw, kw, kw])
+
+            # 2. Apply the Category Filter
+            if category and category != "All Categories":
+                query += " AND category = %s"
+                params.append(category)
+
+            # Put the newest cases at the top
+            query += " ORDER BY created_at DESC"
+
+            cursor.execute(query, tuple(params))
+            results = cursor.fetchall()
+            conn.close()
+
+            return results
+        except Exception as e:
+            print(f"Omni-Search Error: {e}")
+            return []
