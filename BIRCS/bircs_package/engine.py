@@ -301,31 +301,38 @@ class DatabaseEngine:
             return {"hotspot": "Error", "hotspot_pct": 0.0, "peak_hours": "Error"}
 
     def update_incident_resolution(self, case_id, settlement_text, stage, deadline, officer_name):
-        """Updates the incident with the final resolution details in the EXACT correct order"""
+        """Smart save: Auto-detects if it should save to Phase 1 or Phase 2"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
 
-            # The order of the %s here is:
-            # 1. settlement, 2. stage, 3. deadline, 4. officer, 5. case_id
-            query = """
-                    UPDATE incidents
-                    SET settlement_details  = %s,
-                        hearing_stage       = %s,
-                        compliance_deadline = %s,
-                        status              = 'Resolved',
-                        processed_by        = %s
-                    WHERE case_no = %s \
-                    """
+            # Check if Phase 1 already exists
+            cursor.execute("SELECT settlement_details FROM incidents WHERE case_no = %s", (case_id,))
+            case = cursor.fetchone()
 
-            # This tuple MUST perfectly match the order of the %s above!
+            if case and case.get('settlement_details'):
+                # Phase 1 exists! Save this to Phase 2.
+                query = """
+                    UPDATE incidents 
+                    SET settlement_details_2 = %s, hearing_stage = %s, compliance_deadline = %s, 
+                        processed_by = %s, status = 'Resolved' 
+                    WHERE case_no = %s
+                """
+            else:
+                # First time resolving! Save to Phase 1.
+                query = """
+                    UPDATE incidents 
+                    SET settlement_details = %s, hearing_stage = %s, compliance_deadline = %s, 
+                        processed_by = %s, status = 'Resolved' 
+                    WHERE case_no = %s
+                """
+
             cursor.execute(query, (settlement_text, stage, deadline, officer_name, case_id))
             conn.commit()
             conn.close()
             return True
-
         except Exception as e:
-            print(f"CRITICAL DB SAVE ERROR: {e}")
+            print(f"Resolution Save Error: {e}")
             return False
 
     def get_smart_suggestion(self, current_narrative, zone):
@@ -695,3 +702,62 @@ class DatabaseEngine:
         except Exception as e:
             print(f"Omni-Search Error: {e}")
             return []
+
+    def reopen_case_direct(self, case_no, second_narrative):
+        """Staff directly re-opens a case. Sets to Pending and saves Narrative 2."""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            query = "UPDATE incidents SET status = 'Pending', narrative_2 = %s WHERE case_no = %s"
+            cursor.execute(query, (second_narrative, case_no))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Direct Reopen Error: {e}")
+            return False
+
+# ==========================================
+    # APPEALS & KAPITAN APPROVAL SYSTEM
+    # ==========================================
+    def request_case_reopen(self, case_no, new_narrative):
+        """Staff requests a re-open. Flags it for the Kapitan."""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            query = "UPDATE incidents SET reopen_status = 'Requested', narrative_2 = %s WHERE case_no = %s"
+            cursor.execute(query, (new_narrative, case_no))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            return False
+
+    def get_reopen_requests(self):
+        """Kapitan fetches all pending appeals"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM incidents WHERE reopen_status = 'Requested'")
+            results = cursor.fetchall()
+            conn.close()
+            return results
+        except Exception as e:
+            return []
+
+    def handle_reopen_request(self, case_no, action):
+        """Kapitan approves or denies the request"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            if action == 'Approve':
+                # Unlocks the case and makes it Pending again!
+                query = "UPDATE incidents SET status = 'Pending', reopen_status = 'Approved' WHERE case_no = %s"
+            else:
+                query = "UPDATE incidents SET reopen_status = 'Denied' WHERE case_no = %s"
+            cursor.execute(query, (case_no,))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            return False
