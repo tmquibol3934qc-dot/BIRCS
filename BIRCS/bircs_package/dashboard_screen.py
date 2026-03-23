@@ -88,21 +88,16 @@ class DashboardWindow:
 
     def launch_admin_dashboard(self, kapitan_data):
         try:
-            # 1. Hide the staff dashboard completely
             self.window.withdraw()
-
-            # 2. Pass 'self' so the Admin window knows who to unhide later!
             from .admin_dashboard import AdminDashboardWindow
             AdminDashboardWindow(self.engine, kapitan_data, parent_dashboard=self)
-
         except Exception as e:
-            self.window.deiconify()  # If it crashes, bring the dashboard back!
+            self.window.deiconify()
             messagebox.showerror("System Error", f"Could not launch Admin Dashboard:\n{e}")
 
     def restore_dashboard(self):
-        """Called by the Admin dashboard when it closes to unhide the staff screen"""
         self.window.deiconify()
-        self.window.state('zoomed')  # Add this line to force it back to full screen!
+        self.window.state('zoomed')
 
     def handle_logout(self):
         if messagebox.askyesno("Confirm Logout", "Are you sure you want to log out of the Command Center?"):
@@ -186,24 +181,38 @@ class DashboardWindow:
         ctk.CTkLabel(top_ctrls, text="Recent Blotter Entries", font=("Arial", 16, "bold"),
                      text_color=self.text_dark).pack(side="left")
 
+        # --- THE UPGRADED LIVE FILTER CONTROLS ---
+
+        # 1. Dynamic Category Dropdown
+        cat_list = ["All Categories"] + self.engine.get_incident_categories()
+        self.filter_category_var = ctk.StringVar(value="All Categories")
+
+        dropdown = ctk.CTkOptionMenu(top_ctrls, variable=self.filter_category_var, values=cat_list,
+                                     fg_color=self.primary, width=140, height=35, command=self.trigger_live_filter)
+        dropdown.pack(side="right", padx=(10, 0))
+
+        # 2. Omni-Search Box
         self.search_var = ctk.StringVar()
-        self.search_var.trace_add("write", self.filter_table)
+        self.search_var.trace_add("write", self.trigger_live_filter)
 
-        search = ctk.CTkEntry(top_ctrls, textvariable=self.search_var, placeholder_text="Search ID or Zone...",
-                              width=150, height=30, border_color="#E0E0E0")
-        search.pack(side="right", padx=(10, 0))
+        # 2. Omni-Search Box (Fixed Placeholder Bug!)
+        self.search_entry = ctk.CTkEntry(top_ctrls,
+                                         placeholder_text="e.g., Search Case ID, Name, or Zone...",
+                                         width=280, height=35, border_color="#E0E0E0")
+        self.search_entry.pack(side="right", padx=(10, 0))
 
-        dropdown = ctk.CTkOptionMenu(top_ctrls, values=["All Categories", "Incidents", "Complaints"],
-                                     fg_color=self.primary, width=120, height=30)
-        dropdown.pack(side="right")
+        # We bind the physical key release to trigger the filter directly
+        self.search_entry.bind("<KeyRelease>", self.trigger_live_filter)
 
         header_row = ctk.CTkFrame(container, fg_color="transparent")
         header_row.pack(fill="x", padx=20, pady=(10, 5))
 
+        # Added some padding to make room for the larger Category+Zone text!
         ctk.CTkLabel(header_row, text="ID", font=("Arial", 12, "bold"), text_color=self.text_muted, width=60,
                      anchor="w").pack(side="left")
-        ctk.CTkLabel(header_row, text="Type/Zone", font=("Arial", 12, "bold"), text_color=self.text_muted, width=150,
-                     anchor="w").pack(side="left")
+        ctk.CTkLabel(header_row, text="Category & Zone", font=("Arial", 12, "bold"), text_color=self.text_muted,
+                     width=180,
+                     anchor="w").pack(side="left", padx=(0, 10))
         ctk.CTkLabel(header_row, text="Processed By", font=("Arial", 12, "bold"), text_color=self.primary, width=120,
                      anchor="w").pack(side="left")
         ctk.CTkLabel(header_row, text="Time", font=("Arial", 12, "bold"), text_color=self.text_muted, width=100,
@@ -218,20 +227,15 @@ class DashboardWindow:
 
         self.draw_table_rows(self.all_incidents)
 
-    def filter_table(self, *args):
-        query = self.search_var.get().lower()
-        if not query:
-            self.draw_table_rows(self.all_incidents)
-            return
 
-        filtered_data = []
-        for row in self.all_incidents:
-            case_id = str(row.get('case_no', '')).lower()
-            zone = str(row.get('zone', '')).lower()
-            officer = str(row.get('processed_by', '')).lower()
-            if query in case_id or query in zone or query in officer:
-                filtered_data.append(row)
+        # --- THE NEW ENGINE-POWERED FILTER ---
+    def trigger_live_filter(self, *args):
 
+        keyword = self.search_entry.get()
+        category = self.filter_category_var.get()
+
+
+        filtered_data = self.engine.advanced_search_incidents(keyword, category)
         self.draw_table_rows(filtered_data)
 
     def draw_table_rows(self, data_to_draw):
@@ -251,7 +255,12 @@ class DashboardWindow:
             else:
                 color = self.orange
 
-            self.add_table_row(self.table_rows_frame, row['case_no'], f"Zone: {row['zone']}", row['processed_by'],
+            # Combines the Category and Zone to look great in the table!
+            cat = row.get('category', 'Uncategorized')
+            zone = row.get('zone', 'N/A')
+            type_txt = f"{cat} ({zone})"
+
+            self.add_table_row(self.table_rows_frame, row['case_no'], type_txt, row['processed_by'],
                                row['exact_time'], row['status'], color)
 
     def add_table_row(self, parent, case_id, type_txt, proc_by, time_txt, status, color):
@@ -261,8 +270,9 @@ class DashboardWindow:
 
         ctk.CTkLabel(row, text=case_id, font=("Arial", 12), text_color=self.primary, width=60, anchor="w").pack(
             side="left")
-        ctk.CTkLabel(row, text=type_txt, font=("Arial", 12), text_color=self.text_dark, width=150, anchor="w").pack(
-            side="left")
+        ctk.CTkLabel(row, text=type_txt, font=("Arial", 12, "bold"), text_color=self.text_dark, width=180,
+                     anchor="w").pack(
+            side="left", padx=(0, 10))
         ctk.CTkLabel(row, text=proc_by, font=("Arial", 12), text_color=self.text_muted, width=120, anchor="w").pack(
             side="left")
         ctk.CTkLabel(row, text=time_txt, font=("Arial", 12), text_color=self.text_muted, width=100, anchor="w").pack(
