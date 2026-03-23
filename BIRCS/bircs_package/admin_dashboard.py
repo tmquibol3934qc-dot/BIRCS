@@ -78,26 +78,71 @@ class AdminDashboardWindow:
         self.btn_analytics.configure(fg_color=self.primary if tab_name == "analytics" else "transparent")
 
     # ==========================================
-    # 1. MASTER DASHBOARD
+    # 1. MASTER DASHBOARD (WITH LIVE SEARCH)
     # ==========================================
     def show_master_dashboard(self):
         self.clear_main_frame()
         self.set_active_tab("master")
 
         ctk.CTkLabel(self.main_frame, text="Master Database (All Cases)", font=("Arial", 24, "bold"),
-                     text_color=self.text_dark).pack(anchor="w", padx=30, pady=(30, 15))
+                     text_color=self.text_dark).pack(anchor="w", padx=30, pady=(30, 0))
 
-        list_container = ctk.CTkScrollableFrame(self.main_frame, fg_color="transparent")
-        list_container.pack(fill="both", expand=True, padx=20, pady=10)
+        # --- THE SEARCH & FILTER BAR ---
+        filter_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        filter_frame.pack(fill="x", padx=30, pady=(15, 10))
 
-        cases = self.engine.get_all_incidents()
+        # The Omni-Search Box
+        self.search_var = ctk.StringVar()
+        self.search_entry = ctk.CTkEntry(
+            filter_frame,
+            textvariable=self.search_var,
+            placeholder_text="e.g., Search by Case ID, Complainant, or Respondent name...",
+            width=350,
+            height=40,
+            font=("Arial", 12)
+        )
+        self.search_entry.pack(side="left", padx=(0, 15))
+        self.search_entry.bind("<KeyRelease>", lambda e: self.refresh_case_list())
 
-        if not cases:
-            ctk.CTkLabel(list_container, text="No cases found in the database.", text_color="gray").pack(pady=50)
+        # The Dynamic Category Dropdown
+        cat_list = ["All Categories"] + self.engine.get_incident_categories()
+        self.filter_category_var = ctk.StringVar(value="All Categories")
+        self.category_dropdown = ctk.CTkOptionMenu(
+            filter_frame,
+            variable=self.filter_category_var,
+            values=cat_list,
+            width=200,
+            height=40,
+            fg_color=self.primary,
+            button_color=self.primary,
+            command=lambda e: self.refresh_case_list()
+        )
+        self.category_dropdown.pack(side="left")
+
+        # Container for the cases
+        self.list_container = ctk.CTkScrollableFrame(self.main_frame, fg_color="transparent")
+        self.list_container.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # Trigger the initial load
+        self.refresh_case_list()
+
+    def refresh_case_list(self):
+        """Clears the screen and loads cases based on the Omni-Search and Category"""
+        for widget in self.list_container.winfo_children():
+            widget.destroy()
+
+        keyword = self.search_var.get()
+        category = self.filter_category_var.get()
+
+        filtered_cases = self.engine.advanced_search_incidents(keyword, category)
+
+        if not filtered_cases:
+            ctk.CTkLabel(self.list_container, text="No cases match your search criteria.", text_color="gray",
+                         font=("Arial", 14, "italic")).pack(pady=50)
             return
 
-        for case in cases:
-            self.build_master_case_card(list_container, case)
+        for case in filtered_cases:
+            self.build_master_case_card(self.list_container, case)
 
     def build_master_case_card(self, parent, case):
         case_no = case.get('case_no')
@@ -105,6 +150,7 @@ class AdminDashboardWindow:
         comp = case.get('complainant_name', 'Not Recorded')
         resp = case.get('respondent_name', 'Not Recorded')
         officer = case.get('processed_by', 'Unknown')
+        category = case.get('category', 'Uncategorized')
 
         border_col = self.red if status == 'Urgent' else (self.primary if status == 'Resolved' else self.orange)
 
@@ -116,6 +162,8 @@ class AdminDashboardWindow:
         ctk.CTkLabel(left_info, text=f"Case #{case_no}", font=("Arial", 14, "bold"), text_color=self.text_dark).pack(
             anchor="w")
         ctk.CTkLabel(left_info, text=f"{comp} vs {resp}", font=("Arial", 12), text_color="gray").pack(anchor="w")
+        ctk.CTkLabel(left_info, text=f"Category: {category}", font=("Arial", 11, "italic"),
+                     text_color=self.primary).pack(anchor="w")
 
         right_info = ctk.CTkFrame(card, fg_color="transparent")
         right_info.pack(side="right", padx=15, pady=10)
@@ -147,30 +195,48 @@ class AdminDashboardWindow:
         info_frame.pack(fill="x", padx=20, pady=(5, 15))
 
         ctk.CTkLabel(info_frame, text="Zone Level:", font=("Arial", 12, "bold")).grid(row=0, column=0, sticky="w",
-                                                                                      padx=15, pady=5)
-        ctk.CTkLabel(info_frame, text=row_data.get('zone', 'N/A')).grid(row=0, column=1, sticky="w", padx=(0, 40))
+                                                                                      padx=15, pady=(10, 5))
+        ctk.CTkLabel(info_frame, text=row_data.get('zone', 'N/A')).grid(row=0, column=1, sticky="w", padx=(0, 20),
+                                                                        pady=(10, 5))
+
+        ctk.CTkLabel(info_frame, text="Category:", font=("Arial", 12, "bold"), text_color=self.orange).grid(row=0,
+                                                                                                            column=2,
+                                                                                                            sticky="w",
+                                                                                                            padx=15,
+                                                                                                            pady=(10,
+                                                                                                                  5))
+        ctk.CTkLabel(info_frame, text=row_data.get('category', 'Uncategorized'), font=("Arial", 12, "bold")).grid(row=0,
+                                                                                                                  column=3,
+                                                                                                                  sticky="w",
+                                                                                                                  padx=10,
+                                                                                                                  pady=(
+                                                                                                                      10,
+                                                                                                                      5))
 
         exact_date = row_data.get('date_of_incident') or 'N/A'
         exact_time = row_data.get('exact_time') or ''
         ctk.CTkLabel(info_frame, text="Logged Date/Time:", font=("Arial", 12, "bold")).grid(row=1, column=0, sticky="w",
                                                                                             padx=15, pady=5)
-        ctk.CTkLabel(info_frame, text=f"{exact_date} {exact_time}").grid(row=1, column=1, sticky="w", padx=(0, 40))
+        ctk.CTkLabel(info_frame, text=f"{exact_date} {exact_time}").grid(row=1, column=1, sticky="w", padx=(0, 20),
+                                                                         pady=5)
 
         processed_by = row_data.get('processed_by') or 'Not Recorded'
-        ctk.CTkLabel(info_frame, text="Handling Officer:", font=("Arial", 12, "bold")).grid(row=0, column=2, sticky="w",
-                                                                                            pady=5)
-        ctk.CTkLabel(info_frame, text=processed_by, text_color=self.primary, font=("Arial", 12, "bold")).grid(row=0,
+        ctk.CTkLabel(info_frame, text="Handling Officer:", font=("Arial", 12, "bold")).grid(row=1, column=2, sticky="w",
+                                                                                            padx=15, pady=5)
+        ctk.CTkLabel(info_frame, text=processed_by, text_color=self.primary, font=("Arial", 12, "bold")).grid(row=1,
                                                                                                               column=3,
                                                                                                               sticky="w",
-                                                                                                              padx=10)
+                                                                                                              padx=10,
+                                                                                                              pady=5)
 
         status = row_data.get('status') or 'N/A'
-        ctk.CTkLabel(info_frame, text="Current Status:", font=("Arial", 12, "bold")).grid(row=1, column=2, sticky="w",
-                                                                                          pady=5)
+        ctk.CTkLabel(info_frame, text="Current Status:", font=("Arial", 12, "bold")).grid(row=2, column=0, sticky="w",
+                                                                                          padx=15, pady=(5, 10))
         status_color = self.red if status == 'Urgent' else (self.primary if status == 'Resolved' else self.orange)
-        ctk.CTkLabel(info_frame, text=status, text_color=status_color, font=("Arial", 12, "bold")).grid(row=1, column=3,
+        ctk.CTkLabel(info_frame, text=status, text_color=status_color, font=("Arial", 12, "bold")).grid(row=2, column=1,
                                                                                                         sticky="w",
-                                                                                                        padx=10)
+                                                                                                        padx=(0, 20),
+                                                                                                        pady=(5, 10))
 
         # --- SECTION 2: PARTIES ---
         ctk.CTkLabel(scroll_area, text="👥 Involved Parties", font=("Arial", 14, "bold"),
@@ -179,15 +245,29 @@ class AdminDashboardWindow:
         parties_frame.pack(fill="x", padx=20, pady=(5, 15))
 
         complainant = row_data.get('complainant_name') or "Not Recorded"
+        comp_cont = row_data.get('complainant_contact') or "N/A"
         defendant = row_data.get('respondent_name') or "Not Recorded"
+        resp_cont = row_data.get('respondent_contact') or "N/A"
 
         ctk.CTkLabel(parties_frame, text="Complainant:", font=("Arial", 12, "bold"), text_color=self.primary).grid(
-            row=0, column=0, sticky="w", padx=15, pady=8)
-        ctk.CTkLabel(parties_frame, text=complainant, font=("Arial", 12)).grid(row=0, column=1, sticky="w", padx=10)
+            row=0, column=0, sticky="w", padx=15, pady=(10, 2))
+        ctk.CTkLabel(parties_frame, text=f"{complainant} (Contact: {comp_cont})", font=("Arial", 12)).grid(row=0,
+                                                                                                           column=1,
+                                                                                                           sticky="w",
+                                                                                                           padx=10,
+                                                                                                           pady=(10, 2))
 
-        ctk.CTkLabel(parties_frame, text="Defendant/Respondent:", font=("Arial", 12, "bold"), text_color=self.red).grid(
-            row=1, column=0, sticky="w", padx=15, pady=(0, 8))
-        ctk.CTkLabel(parties_frame, text=defendant, font=("Arial", 12)).grid(row=1, column=1, sticky="w", padx=10)
+        ctk.CTkLabel(parties_frame, text="Respondent:", font=("Arial", 12, "bold"), text_color=self.red).grid(row=1,
+                                                                                                              column=0,
+                                                                                                              sticky="w",
+                                                                                                              padx=15,
+                                                                                                              pady=(2,
+                                                                                                                    10))
+        ctk.CTkLabel(parties_frame, text=f"{defendant} (Contact: {resp_cont})", font=("Arial", 12)).grid(row=1,
+                                                                                                         column=1,
+                                                                                                         sticky="w",
+                                                                                                         padx=10,
+                                                                                                         pady=(2, 10))
 
         # --- SECTION 3: NARRATIVE & AUDIT ---
         ctk.CTkLabel(scroll_area, text="📝 Officer's Narrative", font=("Arial", 14, "bold"),
@@ -244,7 +324,6 @@ class AdminDashboardWindow:
         ctk.CTkLabel(header_frame, text="Team Management", font=("Arial", 24, "bold"), text_color=self.text_dark).pack(
             side="left")
 
-        # THE ADD ACCOUNT BUTTON
         add_btn = ctk.CTkButton(header_frame, text="+ Add Account", fg_color=self.primary, hover_color=self.dark_green,
                                 font=("Arial", 12, "bold"), height=35, command=self.launch_add_account)
         add_btn.pack(side="right")
@@ -304,7 +383,6 @@ class AdminDashboardWindow:
         popup.transient(self.window)
         popup.grab_set()
 
-        # Blue Performance Header
         perf_frame = ctk.CTkFrame(popup, fg_color=self.blue, corner_radius=0)
         perf_frame.pack(fill="x")
 
@@ -331,13 +409,8 @@ class AdminDashboardWindow:
 
         fname_entry = create_field("First Name", user.get('first_name'))
         lname_entry = create_field("Last Name", user.get('last_name'))
-
-        # THE FIX: Changed 'Username' to 'Employee ID'
         emp_entry = create_field("Employee ID", user.get('employee_id'))
-
-        # THE FIX: Added the new RFID text box right below it!
         rfid_entry = create_field("RFID Code", user.get('rfid_code'))
-
         pwd_entry = create_field("Password", user.get('password'))
 
         ctk.CTkLabel(scroll_frame, text="System Role", font=("Arial", 11, "bold")).pack(anchor="w", pady=(10, 2))
@@ -345,14 +418,12 @@ class AdminDashboardWindow:
         ctk.CTkOptionMenu(scroll_frame, variable=role_var, values=["Staff", "Admin", "Kapitan"], fg_color="white",
                           text_color="black").pack(fill="x")
 
-        # Suspension Logic
         ctk.CTkLabel(scroll_frame, text="Account Status", font=("Arial", 11, "bold")).pack(anchor="w", pady=(10, 2))
         stat_var = ctk.StringVar(value=user.get('status', 'Active'))
         stat_menu = ctk.CTkOptionMenu(scroll_frame, variable=stat_var, values=["Active", "Suspended", "Blocked"])
         stat_menu.pack(fill="x")
 
         susp_frame = ctk.CTkFrame(scroll_frame, fg_color="#FFF3CD", corner_radius=8)
-
         ctk.CTkLabel(susp_frame, text="Suspend For:", font=("Arial", 11, "bold"), text_color="#856404").pack(
             side="left", padx=10, pady=10)
         susp_val_entry = ctk.CTkEntry(susp_frame, width=60, height=30)
@@ -380,14 +451,11 @@ class AdminDashboardWindow:
             role_val = role_var.get()
             stat_val = stat_var.get()
             new_rfid = rfid_entry.get().strip()
-
             s_val = susp_val_entry.get() if stat_val == "Suspended" else 0
             s_type = susp_type_var.get()
 
-            success = self.engine.update_user_account(
-                user['id'], fname, lname, emp_id, pwd, role_val, stat_val, new_rfid, s_val, s_type
-            )
-
+            success = self.engine.update_user_account(user['id'], fname, lname, emp_id, pwd, role_val, stat_val,
+                                                      new_rfid, s_val, s_type)
             if success:
                 messagebox.showinfo("Success", "User account successfully updated!")
                 popup.destroy()
@@ -398,9 +466,6 @@ class AdminDashboardWindow:
         ctk.CTkButton(scroll_frame, text="Save Changes", fg_color=self.primary, hover_color=self.dark_green,
                       font=("Arial", 14, "bold"), height=45, command=save_changes).pack(pady=30)
 
-    # ==========================================
-    # EXIT ROUTINE
-    # ==========================================
     def lock_and_exit(self):
         if messagebox.askyesno("Confirm Exit", "Are you sure you want to lock the Admin Dashboard and log out?"):
             self.window.destroy()
