@@ -14,7 +14,9 @@ class LoginWindow:
         self.header_font = "Young Serif"
         self.ui_font = "Poppins"
         self.root.title("BIRCS Login")
+
         w, h = 1000, 650
+
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
         x = int((sw / 2) - (w / 2))
@@ -26,6 +28,7 @@ class LoginWindow:
         self.bg_label = ctk.CTkLabel(self.root, text="", image=self.bg_image)
         self.bg_label.pack(fill="both", expand=True)
         self.create_login_card()
+
 
     def load_images(self):
         current_path = os.path.dirname(os.path.realpath(__file__))
@@ -59,7 +62,7 @@ class LoginWindow:
 
         back_btn = ctk.CTkButton(card, text="✕", width=30, fg_color="transparent",
                                  text_color=self.color_orange, font=("Arial", 20, "bold"),
-                                 hover_color="#EEE", command=self.close_app)
+                                 hover_color="#EEE", command=self.confirm_exit)
         back_btn.place(x=10, y=10)
 
         if self.logo_image:
@@ -208,3 +211,18 @@ class LoginWindow:
                                  "Python is reading an old version of forgot_password.py!\n\nPlease check your folders and delete any extra copies.")
         except Exception as e:
             messagebox.showerror("Error", f"Could not load screen: {e}")
+
+    # ==========================================
+    # CONFIRM EXIT SA LOGIN SCREEN
+    # ==========================================
+    def confirm_exit(self):
+        # Maglalabas 'to ng popup na may Yes or No
+        response = messagebox.askyesno(
+            "Exit Application",
+            "Are you sure you want to close the BICRS system?"
+        )
+
+        # Kung nag-Yes siya, patayin ang window. Kung No, walang mangyayari.
+        if response:
+            print("System shutting down gracefully...")
+            self.root.destroy()
