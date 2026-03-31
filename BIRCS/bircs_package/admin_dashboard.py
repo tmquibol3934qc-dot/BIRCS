@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from tkinter import messagebox
+from datetime import datetime
 
 
 class AdminDashboardWindow:
@@ -10,10 +11,10 @@ class AdminDashboardWindow:
 
         self.window = ctk.CTkToplevel()
         self.window.title("BICRS - Kapitan Control Center")
-        self.window.state('zoomed')
+        self.window.attributes('-fullscreen', True)
+        self.window.bind("<Key>", self.handle_shortcuts)
         self.window.configure(fg_color="#F4F7F6")
 
-        # --- THE FIX: Added self.green so the popup doesn't crash! ---
         self.primary = "#27AE60"
         self.dark_green = "#1E8449"
         self.green = "#27AE60"
@@ -23,6 +24,15 @@ class AdminDashboardWindow:
         self.red = "#E74C3C"
         self.orange = "#E79124"
         self.blue = "#3F51B5"
+
+        user_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}".strip()
+        user_role = self.user.get('role', 'Kapitan')  # Siguraduhing Kapitan ang lalabas sa role
+
+        # Save agad sa database pag-open!
+        self.audit_id = self.engine.log_user_login(user_name, user_role)
+
+        # Saluhin din natin yung "X" button or Alt+F4 ni Kapitan
+        self.window.protocol("WM_DELETE_WINDOW", self.force_logout_on_close)
 
         self.setup_layout()
         self.show_master_dashboard()
@@ -53,6 +63,11 @@ class AdminDashboardWindow:
                                       anchor="w", command=self.show_user_management)
         self.btn_team.pack(fill="x", padx=15, pady=5)
 
+        self.btn_logs = ctk.CTkButton(self.sidebar, text="🕒 System Logs", font=("Arial", 14, "bold"),
+                                      fg_color="transparent", text_color="white", hover_color=self.dark_green,
+                                      anchor="w", command=self.show_login_logs)
+        self.btn_logs.pack(fill="x", padx=15, pady=5)
+
         self.btn_analytics = ctk.CTkButton(self.sidebar, text="📊 Deep Analytics", font=("Arial", 14, "bold"),
                                            fg_color="transparent", text_color="white", hover_color=self.dark_green,
                                            anchor="w")
@@ -72,6 +87,7 @@ class AdminDashboardWindow:
     def set_active_tab(self, tab_name):
         self.btn_master.configure(fg_color=self.primary if tab_name == "master" else "transparent")
         self.btn_team.configure(fg_color=self.primary if tab_name == "users" else "transparent")
+        self.btn_logs.configure(fg_color=self.primary if tab_name == "logs" else "transparent")
         self.btn_analytics.configure(fg_color=self.primary if tab_name == "analytics" else "transparent")
 
     # ==========================================
@@ -149,7 +165,9 @@ class AdminDashboardWindow:
         card = ctk.CTkFrame(parent, fg_color="white", border_color=border_col, border_width=2, corner_radius=8,
                             cursor="hand2")
         card.pack(fill="x", pady=5, padx=10)
-        card.bind("<Button-1>", lambda e, c=case: self.show_incident_details(c))
+
+        click_cmd = lambda e=None, c=case: self.show_incident_details(c)
+        card.bind("<Button-1>", click_cmd)
 
         left_info = ctk.CTkFrame(card, fg_color="transparent")
         left_info.pack(side="left", padx=15, pady=10)
@@ -157,17 +175,17 @@ class AdminDashboardWindow:
         lbl_id = ctk.CTkLabel(left_info, text=f"Case #{case_no}", font=("Arial", 14, "bold"), text_color=self.text_dark,
                               cursor="hand2")
         lbl_id.pack(anchor="w")
-        lbl_id.bind("<Button-1>", lambda e, c=case: self.show_incident_details(c))
+        lbl_id.bind("<Button-1>", click_cmd)
 
         lbl_names = ctk.CTkLabel(left_info, text=f"{comp} vs {resp}", font=("Arial", 12), text_color="gray",
                                  cursor="hand2")
         lbl_names.pack(anchor="w")
-        lbl_names.bind("<Button-1>", lambda e, c=case: self.show_incident_details(c))
+        lbl_names.bind("<Button-1>", click_cmd)
 
         lbl_cat = ctk.CTkLabel(left_info, text=f"Category: {category}", font=("Arial", 11, "italic"),
                                text_color=self.primary, cursor="hand2")
         lbl_cat.pack(anchor="w")
-        lbl_cat.bind("<Button-1>", lambda e, c=case: self.show_incident_details(c))
+        lbl_cat.bind("<Button-1>", click_cmd)
 
         right_info = ctk.CTkFrame(card, fg_color="transparent")
         right_info.pack(side="right", padx=15, pady=10)
@@ -175,12 +193,15 @@ class AdminDashboardWindow:
         lbl_stat = ctk.CTkLabel(right_info, text=display_status, font=("Arial", 12, "bold"), text_color=border_col,
                                 cursor="hand2")
         lbl_stat.pack(anchor="e")
-        lbl_stat.bind("<Button-1>", lambda e, c=case: self.show_incident_details(c))
+        lbl_stat.bind("<Button-1>", click_cmd)
 
         lbl_off = ctk.CTkLabel(right_info, text=f"Officer: {officer}", font=("Arial", 11, "italic"), text_color="gray",
                                cursor="hand2")
         lbl_off.pack(anchor="e")
-        lbl_off.bind("<Button-1>", lambda e, c=case: self.show_incident_details(c))
+        lbl_off.bind("<Button-1>", click_cmd)
+
+        ctk.CTkButton(card, text="View Details", width=100, fg_color="#F0F0F0", text_color=self.text_dark,
+                      hover_color="#E0E0E0", command=click_cmd).pack(side="right", padx=20)
 
     # ==========================================
     # POPUP: INCIDENT DETAILS & APPROVAL
@@ -198,7 +219,6 @@ class AdminDashboardWindow:
         ctk.CTkLabel(scroll_area, text=f"Case #{row_data.get('case_no')} Comprehensive Report",
                      font=("Arial", 22, "bold"), text_color=self.primary).pack(pady=(10, 15))
 
-        # --- SECTION 1: GENERAL INFO ---
         info_frame = ctk.CTkFrame(scroll_area, fg_color="#FFFFFF", corner_radius=8)
         info_frame.pack(fill="x", padx=20, pady=(5, 15))
 
@@ -216,7 +236,6 @@ class AdminDashboardWindow:
                                                                                                         padx=10,
                                                                                                         pady=(10, 5))
 
-        # --- SECTION 2: PARTIES ---
         parties_frame = ctk.CTkFrame(scroll_area, fg_color="#F8F9FA", corner_radius=8)
         parties_frame.pack(fill="x", padx=20, pady=(5, 15))
 
@@ -236,7 +255,6 @@ class AdminDashboardWindow:
                      text=f"{row_data.get('respondent_name')} (Contact: {row_data.get('respondent_contact') or 'N/A'})",
                      font=("Arial", 12)).grid(row=1, column=1, sticky="w", padx=10, pady=(2, 10))
 
-        # --- PHASE 1: NARRATIVE & RESOLUTION ---
         ctk.CTkLabel(scroll_area, text="📝 Phase 1: Original Report & Settlement", font=("Arial", 14, "bold"),
                      text_color=self.text_dark).pack(anchor="w", padx=20)
 
@@ -252,7 +270,6 @@ class AdminDashboardWindow:
         r1_box.insert("1.0", f"SETTLEMENT:\n{row_data.get('settlement_details') or 'Case still pending.'}")
         r1_box.configure(state="disabled")
 
-        # --- PHASE 2: IF RE-OPENED ---
         if row_data.get('narrative_2'):
             ctk.CTkLabel(scroll_area, text="🔄 Phase 2: Re-open Details", font=("Arial", 14, "bold"),
                          text_color=self.orange).pack(anchor="w", padx=20, pady=(15, 5))
@@ -270,7 +287,6 @@ class AdminDashboardWindow:
                 r2_box.insert("1.0", f"NEW SETTLEMENT:\n{row_data.get('settlement_details_2')}")
                 r2_box.configure(state="disabled")
 
-        # --- ACTION BUTTONS ---
         btn_frame = ctk.CTkFrame(scroll_area, fg_color="transparent")
         btn_frame.pack(pady=(20, 20))
 
@@ -450,8 +466,151 @@ class AdminDashboardWindow:
         ctk.CTkButton(scroll_frame, text="Save Changes", fg_color=self.primary, hover_color=self.dark_green,
                       font=("Arial", 14, "bold"), height=45, command=save_changes).pack(pady=30)
 
+    # ==========================================
+    # 4. SYSTEM LOGS (AUDIT TRAIL)
+    # ==========================================
+    def show_login_logs(self):
+        self.clear_main_frame()
+        self.set_active_tab("logs")
+
+        header_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", padx=30, pady=(30, 15))
+
+        ctk.CTkLabel(header_frame, text="System Access Logs", font=("Arial", 24, "bold"),
+                     text_color=self.text_dark).pack(side="left")
+        ctk.CTkButton(header_frame, text="🔄 Refresh", width=100, fg_color="#E0E0E0", text_color=self.text_dark,
+                      hover_color="#D0D0D0", command=self.show_login_logs).pack(side="right")
+
+        headers = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        headers.pack(fill="x", padx=40, pady=(10, 5))
+
+        ctk.CTkLabel(headers, text="Employee", font=("Arial", 12, "bold"), text_color=self.text_muted, width=200,
+                     anchor="w").pack(side="left")
+        ctk.CTkLabel(headers, text="Role", font=("Arial", 12, "bold"), text_color=self.text_muted, width=100,
+                     anchor="w").pack(side="left")
+        ctk.CTkLabel(headers, text="Time In", font=("Arial", 12, "bold"), text_color=self.text_muted, width=180,
+                     anchor="w").pack(side="left")
+        ctk.CTkLabel(headers, text="Time Out", font=("Arial", 12, "bold"), text_color=self.text_muted, width=180,
+                     anchor="w").pack(side="left")
+        ctk.CTkLabel(headers, text="Session Time", font=("Arial", 12, "bold"), text_color=self.text_muted, width=100,
+                     anchor="e").pack(side="right", padx=10)
+
+        ctk.CTkFrame(self.main_frame, height=2, fg_color="#E0E0E0").pack(fill="x", padx=30)
+
+        self.logs_container = ctk.CTkScrollableFrame(self.main_frame, fg_color="transparent")
+        self.logs_container.pack(fill="both", expand=True, padx=20, pady=10)
+
+        logs = self.engine.get_login_logs()
+
+        if not logs:
+            ctk.CTkLabel(self.logs_container, text="No system logs found in the database.", text_color="gray",
+                         font=("Arial", 14, "italic")).pack(pady=50)
+            return
+
+        for log in logs:
+            self.build_log_row(self.logs_container, log)
+
+    def build_log_row(self, parent, log):
+        row = ctk.CTkFrame(parent, fg_color="white", corner_radius=5, height=45)
+        row.pack(fill="x", pady=2, padx=10)
+        row.pack_propagate(False)
+
+        name = log.get('employee_name', 'Unknown')
+        role = log.get('role', 'N/A')
+        login_time = log.get('login_time')
+        logout_time = log.get('logout_time')
+
+        try:
+            if isinstance(login_time, str):
+                login_time = datetime.strptime(login_time, '%Y-%m-%d %H:%M:%S')
+
+            login_str = login_time.strftime("%b %d, %Y - %I:%M %p")
+
+            if logout_time:
+                if isinstance(logout_time, str):
+                    logout_time = datetime.strptime(logout_time, '%Y-%m-%d %H:%M:%S')
+
+                logout_str = logout_time.strftime("%b %d, %Y - %I:%M %p")
+
+                duration = logout_time - login_time
+                hours, remainder = divmod(duration.total_seconds(), 3600)
+                minutes, _ = divmod(remainder, 60)
+
+                if hours > 0:
+                    duration_str = f"{int(hours)}h {int(minutes)}m"
+                else:
+                    duration_str = f"{int(minutes)} mins"
+                    if int(minutes) == 0: duration_str = "< 1 min"
+
+            else:
+                duration_str = "Active Now"
+                logout_str = "---"
+        except Exception as e:
+            login_str = str(login_time)
+            logout_str = str(logout_time)
+            duration_str = "Error"
+
+        ctk.CTkLabel(row, text=name, font=("Arial", 12, "bold"), text_color=self.text_dark, width=200, anchor="w").pack(
+            side="left", padx=(10, 0))
+        ctk.CTkLabel(row, text=role.upper(), font=("Arial", 10, "bold"), text_color=self.blue, width=100,
+                     anchor="w").pack(side="left")
+        ctk.CTkLabel(row, text=login_str, font=("Arial", 11), text_color=self.text_muted, width=180, anchor="w").pack(
+            side="left")
+        ctk.CTkLabel(row, text=logout_str, font=("Arial", 11), text_color=self.text_muted, width=180, anchor="w").pack(
+            side="left")
+
+        dur_color = self.green if duration_str == "Active Now" else self.text_muted
+        ctk.CTkLabel(row, text=duration_str, font=("Arial", 11, "bold"), text_color=dur_color, width=100,
+                     anchor="e").pack(side="right", padx=10)
+
     def lock_and_exit(self):
         if messagebox.askyesno("Confirm Exit", "Are you sure you want to lock the Admin Dashboard and log out?"):
+
+            # --- I-SAVE ANG EXACT LOGOUT TIME NI KAPITAN ---
+            if hasattr(self, 'audit_id'):
+                self.engine.log_user_logout(self.audit_id)
+            # -----------------------------------------------
+
             self.window.destroy()
+
+            # Ibalik sa Staff Dashboard (kung may naiwan) o sa Login
             if self.parent_dashboard:
                 self.parent_dashboard.restore_dashboard()
+
+    def force_logout_on_close(self):
+        # I-save muna sa database bago mamatay ang admin panel!
+        if hasattr(self, 'audit_id'):
+            print("Admin Dashboard closed via X or Alt+F4. Saving exact logout time...")
+            self.engine.log_user_logout(self.audit_id)
+
+        self.window.destroy()
+
+        if self.parent_dashboard:
+            self.parent_dashboard.restore_dashboard()
+
+    # ==========================================
+    # SMART KEYBOARD SHORTCUTS (KAPITAN)
+    # ==========================================
+    def handle_shortcuts(self, event):
+        # 1. THE SAFETY LOCK
+        focused_widget = self.window.focus_get()
+        if focused_widget:
+            widget_type = type(focused_widget).__name__
+            if widget_type in ['CTkEntry', 'CTkTextbox', 'Entry', 'Text']:
+                return
+
+        # 2. THE HOTKEYS
+        key = event.char.lower()
+
+        if key == '1':
+            print("Shortcut: 1 pressed -> Master Dashboard")
+            self.show_master_dashboard()
+        elif key == '2':
+            print("Shortcut: 2 pressed -> Team Management")
+            self.show_user_management()
+        elif key == '3':
+            print("Shortcut: 3 pressed -> System Logs")
+            self.show_login_logs()
+        elif key == 'l':
+            print("Shortcut: L pressed -> Lock and Exit")
+            self.lock_and_exit()
