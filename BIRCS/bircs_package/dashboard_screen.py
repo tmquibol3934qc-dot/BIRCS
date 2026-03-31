@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from tkinter import messagebox
+from datetime import datetime  # <-- WAG MO TONG KAKALIMUTAN KUNG AYAW MONG MAGKA-ERROR YUNG TIMER
 from .incident_blotter import IncidentBlotterPage
 from .resolution_page import ResolutionPage
 
@@ -13,29 +14,51 @@ class DashboardWindow:
 
         self.window = ctk.CTkToplevel()
         self.window.title("BICRS - Command Center Dashboard")
+        self.window.overrideredirect(True)
         self.window.state('zoomed')
-
+        self.window.protocol("WM_DELETE_WINDOW", self.force_logout_on_close)
+        self.window.bind("<Key>", self.handle_shortcuts)
         self.bg_color = "#F4F7F6"
         self.sidebar_color = "#FFFFFF"
         self.text_dark = "#2B2B2B"
         self.text_muted = "#7A7A7A"
-
         self.primary = "#E79124"
         self.orange = "#F2994A"
         self.green = "#27AE60"
         self.red = "#EB5757"
 
+        # ==========================================
+        # NEW: TIMER & AUDIT INIT LOGIC
+        # ==========================================
+        self.login_time = datetime.now()
+        user_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}"
+
+        # Sini-save natin 'yung ID pag nag-login para may i-update tayo pag nag-logout
+        self.audit_id = self.engine.log_user_login(user_name, self.user_role)
+
         self.window.grid_columnconfigure(1, weight=1)
         self.window.grid_rowconfigure(0, weight=1)
 
         self.nav_buttons = {}
+
+        # 1. Gawa muna ng sidebar
         self.create_sidebar()
 
+        # 2. Setup ng main frame
         self.main_frame = ctk.CTkFrame(self.window, fg_color=self.bg_color, corner_radius=0)
         self.main_frame.grid(row=0, column=1, sticky="nsew")
 
+
+        # 3. Tawagin 'yung bago nating Profile Panel at Timer
+        self.create_profile_panel()
+        self.update_timer()
+
+        # 4. I-load ang default content
         self.show_overview_page()
 
+    # ==========================================
+    # SIDEBAR SETUP (Inalis na yung old buttons)
+    # ==========================================
     def create_sidebar(self):
         sidebar = ctk.CTkFrame(self.window, width=220, corner_radius=0, fg_color=self.sidebar_color)
         sidebar.grid(row=0, column=0, sticky="nsew")
@@ -58,45 +81,9 @@ class DashboardWindow:
         self.nav_buttons["resolution"] = self.create_nav_btn(sidebar, "⚖️ Resolution", self.show_resolution_page)
         self.nav_buttons["analytics"] = self.create_nav_btn(sidebar, "📊 Analytics", self.show_analytics_page)
 
+        # Space filler sa ilalim para di dikit dikit
         ctk.CTkFrame(sidebar, height=150, fg_color="transparent").pack()
-
-        admin_btn = ctk.CTkButton(sidebar, text="🔑 Kapitan Access", fg_color="transparent", text_color=self.green,
-                                  hover_color="#E8F5E9", font=("Arial", 13, "bold"), command=self.prompt_admin_access)
-        admin_btn.pack(side="bottom", pady=(0, 5))
-
-        logout_btn = ctk.CTkButton(sidebar, text="Log Out", fg_color="transparent", text_color=self.red,
-                                   hover_color="#FEEEEE", font=("Arial", 13, "bold"), command=self.handle_logout)
-        logout_btn.pack(side="bottom", pady=20)
-
-    def prompt_admin_access(self):
-        dialog = ctk.CTkInputDialog(text="Please scan Kapitan RFID to proceed:", title="Authorization Required")
-        scanned_rfid = dialog.get_input()
-        if scanned_rfid:
-            success, kapitan_data = self.engine.verify_kapitan_access(scanned_rfid)
-            if success:
-                messagebox.showinfo("Access Granted", "Kapitan verified. Opening Secure Dashboard.")
-                self.launch_admin_dashboard(kapitan_data)
-            else:
-                messagebox.showerror("Access Denied", "Invalid RFID or insufficient permissions.")
-
-    def launch_admin_dashboard(self, kapitan_data):
-        try:
-            self.window.withdraw()
-            from .admin_dashboard import AdminDashboardWindow
-            AdminDashboardWindow(self.engine, kapitan_data, parent_dashboard=self)
-        except Exception as e:
-            self.window.deiconify()
-            messagebox.showerror("System Error", f"Could not launch Admin Dashboard:\n{e}")
-
-    def restore_dashboard(self):
-        self.window.deiconify()
-        self.window.state('zoomed')
-
-    def handle_logout(self):
-        if messagebox.askyesno("Confirm Logout", "Are you sure you want to log out of the Command Center?"):
-            self.window.destroy()
-            if self.on_logout:
-                self.on_logout()
+        # NOTE: Wala na dito yung Admin at Logout buttons, nilipat na sa Profile Panel.
 
     def create_nav_btn(self, parent, text, command=None):
         btn = ctk.CTkButton(parent, text=f"  {text}", fg_color="transparent", text_color=self.text_muted,
@@ -112,9 +99,120 @@ class DashboardWindow:
             else:
                 btn.configure(fg_color="transparent", text_color=self.text_muted, hover_color="#F0F0F0")
 
+        # ==========================================
+        # HIDE/SHOW PROFILE ICON LOGIC
+        # ==========================================
+        # Check natin kung may profile_btn na nag-eexist bago natin galawin para iwas error
+        if hasattr(self, 'profile_btn'):
+            if active_key == "dashboard":
+                # Pag nasa Overview Dashboard, ipalabas ulit 'yung icon
+                self.profile_btn.place(relx=0.98, rely=0.02, anchor="ne")
+            else:
+                # Pag nasa Blotter, Resolution, o Analytics, ITAGO yung icon
+                self.profile_btn.place_forget()
+
+                # Bonus: Kung sakaling naiwang bukas 'yung panel bago lumipat ng page, itago rin natin!
+                if self.panel_visible:
+                    self.account_panel.place_forget()
+                    self.panel_visible = False
+
     def clear_main_frame(self):
         for widget in self.main_frame.winfo_children():
             widget.destroy()
+
+        # ==========================================
+        # NEW: FLOATING PROFILE PANEL & TIMER LOGIC
+        # ==========================================
+    def create_profile_panel(self):
+            # 1. Yung bilog na Profile Icon Button (TANGGAL GRAY BOX)
+            self.profile_btn = ctk.CTkButton(
+                self.window, text="👤", width=45, height=45, corner_radius=22,
+                fg_color="transparent",  # <--- ETO YUNG MAGIC WORD PARA MAWALA YUNG GRAY BOX
+                text_color=self.primary,
+                hover_color="#E0E0E0", font=("Arial", 24),
+                command=self.toggle_profile_panel
+            )
+            self.profile_btn.place(relx=0.98, rely=0.02, anchor="ne")
+
+            # 2. Yung Panel Mismo
+            self.account_panel = ctk.CTkFrame(
+                self.window, width=250, corner_radius=10,
+                fg_color="white", border_width=1, border_color="#E0E0E0"
+            )
+            self.panel_visible = False
+
+            header_frame = ctk.CTkFrame(self.account_panel, fg_color=self.primary, corner_radius=10)
+            header_frame.pack(fill="x")
+            header_frame.configure(corner_radius=0)
+            ctk.CTkLabel(header_frame, text="Account Information", font=("Arial", 14, "bold"), text_color="white").pack(
+                pady=10, padx=15, anchor="w")
+
+            # KUNIN ANG DATA NI USER
+            user_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}"
+            emp_no = self.user.get('employee_id', 'EMP-Default')
+            role = self.user_role  # <--- ETO YUNG POSITION NYA
+
+            ctk.CTkLabel(self.account_panel, text="Name:", font=("Arial", 10), text_color=self.text_muted).pack(
+                anchor="w", padx=15, pady=(10, 0))
+            ctk.CTkLabel(self.account_panel, text=user_name, font=("Arial", 12, "bold"),
+                         text_color=self.text_dark).pack(anchor="w", padx=15)
+
+            ctk.CTkLabel(self.account_panel, text="Employee Number:", font=("Arial", 10),
+                         text_color=self.text_muted).pack(anchor="w", padx=15, pady=(5, 0))
+            ctk.CTkLabel(self.account_panel, text=emp_no, font=("Arial", 12, "bold"), text_color=self.text_dark).pack(
+                anchor="w", padx=15)
+
+            # --- DAGDAG NATIN YUNG POSITION DITO ---
+            ctk.CTkLabel(self.account_panel, text="Position:", font=("Arial", 10), text_color=self.text_muted).pack(
+                anchor="w", padx=15, pady=(5, 0))
+            ctk.CTkLabel(self.account_panel, text=role.upper(), font=("Arial", 12, "bold"),
+                         text_color=self.primary).pack(anchor="w", padx=15)
+            # ---------------------------------------
+
+            ctk.CTkFrame(self.account_panel, height=1, fg_color="#E0E0E0").pack(fill="x", padx=15, pady=10)
+
+            ctk.CTkLabel(self.account_panel, text="Session Started:", font=("Arial", 10),
+                         text_color=self.text_muted).pack(anchor="w", padx=15)
+            self.timer_label = ctk.CTkLabel(self.account_panel, text="Just now", font=("Arial", 12, "bold"),
+                                            text_color=self.green)
+            self.timer_label.pack(anchor="w", padx=15, pady=(0, 10))
+
+            ctk.CTkFrame(self.account_panel, height=1, fg_color="#E0E0E0").pack(fill="x", padx=15, pady=(0, 10))
+
+            # Buttons
+            ctk.CTkButton(self.account_panel, text="🔑 Kapitan Access", fg_color="transparent", text_color=self.orange,
+                          hover_color="#FFF3E0", font=("Arial", 12, "bold"), command=self.prompt_admin_access).pack(
+                fill="x", padx=10, pady=5)
+            ctk.CTkButton(self.account_panel, text="Log Out", fg_color="transparent", text_color=self.red,
+                          hover_color="#FEEEEE", font=("Arial", 12, "bold"), command=self.handle_logout).pack(fill="x",
+                                                                                                              padx=10,
+                                                                                                              pady=(0,
+                                                                                                                    15))
+
+    def toggle_profile_panel(self):
+        if self.panel_visible:
+            self.account_panel.place_forget()
+            self.panel_visible = False
+        else:
+            self.account_panel.place(relx=0.98, rely=0.08, anchor="ne")
+            self.account_panel.lift()
+            self.panel_visible = True
+
+    def update_timer(self):
+        diff = datetime.now() - self.login_time
+        mins = int(diff.total_seconds() // 60)
+
+        if mins < 1:
+            time_text = "Just now"
+        elif mins < 60:
+            time_text = f"{mins} minute{'s' if mins > 1 else ''} ago"
+        else:
+            hours = mins // 60
+            rem_mins = mins % 60
+            time_text = f"{hours} hr {rem_mins} min ago"
+
+        self.timer_label.configure(text=time_text)
+        self.window.after(60000, self.update_timer)
 
     # ==========================================
     # OVERVIEW DASHBOARD
@@ -281,7 +379,6 @@ class DashboardWindow:
         ctk.CTkLabel(scroll_area, text=f"Case #{row_data.get('case_no')} Comprehensive Report",
                      font=("Arial", 22, "bold"), text_color=self.primary).pack(pady=(10, 15))
 
-        # --- SECTION 1: GENERAL INFO ---
         info_frame = ctk.CTkFrame(scroll_area, fg_color="#FFFFFF", corner_radius=8)
         info_frame.pack(fill="x", padx=20, pady=(5, 15))
 
@@ -299,7 +396,6 @@ class DashboardWindow:
                                                                                                         padx=10,
                                                                                                         pady=(10, 5))
 
-        # --- SECTION 2: PARTIES ---
         parties_frame = ctk.CTkFrame(scroll_area, fg_color="#F8F9FA", corner_radius=8)
         parties_frame.pack(fill="x", padx=20, pady=(5, 15))
 
@@ -319,7 +415,6 @@ class DashboardWindow:
                      text=f"{row_data.get('respondent_name')} (Contact: {row_data.get('respondent_contact') or 'N/A'})",
                      font=("Arial", 12)).grid(row=1, column=1, sticky="w", padx=10, pady=(2, 10))
 
-        # --- PHASE 1: NARRATIVE & RESOLUTION ---
         ctk.CTkLabel(scroll_area, text="📝 Phase 1: Original Report & Settlement", font=("Arial", 14, "bold"),
                      text_color=self.text_dark).pack(anchor="w", padx=20)
 
@@ -335,11 +430,9 @@ class DashboardWindow:
         r1_box.insert("1.0", f"SETTLEMENT:\n{row_data.get('settlement_details') or 'Case still pending.'}")
         r1_box.configure(state="disabled")
 
-        # --- PHASE 2: DYNAMIC "DENIED" UX HANDLING ---
         reopen_stat = row_data.get('reopen_status')
 
         if row_data.get('narrative_2'):
-            # Determine the title and color based on if it was denied!
             if reopen_stat == 'Requested':
                 p2_title = "⏳ Phase 2: Re-open Request (Pending Approval)"
                 title_col = self.orange
@@ -368,7 +461,6 @@ class DashboardWindow:
                 r2_box.insert("1.0", f"NEW SETTLEMENT:\n{row_data.get('settlement_details_2')}")
                 r2_box.configure(state="disabled")
 
-        # --- THE BUTTON ROW (WITH KAPITAN REQUEST) ---
         btn_frame = ctk.CTkFrame(scroll_area, fg_color="transparent")
         btn_frame.pack(pady=(20, 20))
 
@@ -380,7 +472,6 @@ class DashboardWindow:
                 ctk.CTkLabel(btn_frame, text="✅ Case Re-opened", text_color=self.green,
                              font=("Arial", 12, "bold")).pack(side="left", padx=10)
             elif reopen_stat == 'Denied':
-                # If denied, show the badge AND give them the button back to try again!
                 ctk.CTkLabel(btn_frame, text="❌ Request Denied", text_color=self.red, font=("Arial", 12, "bold")).pack(
                     side="left", padx=10)
                 ctk.CTkButton(btn_frame, text="Submit New Request", fg_color=self.orange, hover_color="#C67B1D",
@@ -435,25 +526,49 @@ class DashboardWindow:
         card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10)
         card.pack(fill="x", pady=(0, 20))
 
-        ctk.CTkLabel(card, text="Active Personnel (LAN)", font=("Arial", 14, "bold"), text_color=self.text_dark).pack(
-            anchor="w", padx=20, pady=(20, 15))
-        self.add_person(card, "Krizzy Balogo", "Desk Officer", True)
-        self.add_person(card, "Kristan Ariate", "Investigator", True)
-        self.add_person(card, "Ayumi Melchor", "Brgy. Captain", False)
-        ctk.CTkFrame(card, height=10, fg_color="transparent").pack()
+        ctk.CTkLabel(card, text="Team Roster & Status", font=("Arial", 14, "bold"), text_color=self.text_dark).pack(
+            anchor="w", padx=20, pady=(20, 10))
 
-    def add_person(self, parent, name, role, is_online):
+        list_frame = ctk.CTkScrollableFrame(card, fg_color="transparent", height=150)
+        list_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        users = self.engine.get_all_users()
+
+        if not users:
+            ctk.CTkLabel(list_frame, text="No personnel found.", text_color="gray", font=("Arial", 11, "italic")).pack(
+                pady=10)
+            return
+
+        for u in users:
+            full_name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip()
+            role = u.get('role', 'Staff')
+            acc_status = u.get('status', 'Active')
+
+            self.add_person(list_frame, full_name, role, acc_status)
+
+    def add_person(self, parent, name, role, acc_status):
         row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", padx=20, pady=8)
+        row.pack(fill="x", padx=10, pady=5)
 
-        dot_color = self.green if is_online else "#CCCCCC"
+        if acc_status == "Active":
+            dot_color = self.green
+        elif acc_status == "Suspended":
+            dot_color = self.orange
+        elif acc_status == "Blocked":
+            dot_color = self.red
+        else:
+            dot_color = "#CCCCCC"
+
         ctk.CTkLabel(row, text="●", text_color=dot_color, font=("Arial", 14)).pack(side="left", padx=(0, 10))
 
         txt_frame = ctk.CTkFrame(row, fg_color="transparent")
         txt_frame.pack(side="left")
+
         ctk.CTkLabel(txt_frame, text=name, font=("Arial", 12, "bold"), text_color=self.text_dark).pack(anchor="w",
                                                                                                        pady=0)
-        ctk.CTkLabel(txt_frame, text=role, font=("Arial", 10), text_color=self.text_muted).pack(anchor="w", pady=0)
+        status_text = f"{role}  |  {acc_status}"
+        ctk.CTkLabel(txt_frame, text=status_text, font=("Arial", 10), text_color=self.text_muted).pack(anchor="w",
+                                                                                                       pady=0)
 
     def build_incident_analytics(self, parent, analytics_data):
         card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10)
@@ -480,6 +595,59 @@ class DashboardWindow:
             anchor="w", padx=20, pady=(5, 20))
 
     # ==========================================
+    # ADMIN ACCESS & LOGOUT (UPDATED)
+    # ==========================================
+    def prompt_admin_access(self):
+        dialog = ctk.CTkInputDialog(text="Please scan Kapitan RFID to proceed:", title="Authorization Required")
+        scanned_rfid = dialog.get_input()
+        if scanned_rfid:
+            success, kapitan_data = self.engine.verify_kapitan_access(scanned_rfid)
+            if success:
+                messagebox.showinfo("Access Granted", "Kapitan verified. Opening Secure Dashboard.")
+                self.launch_admin_dashboard(kapitan_data)
+            else:
+                messagebox.showerror("Access Denied", "Invalid RFID or insufficient permissions.")
+
+    def launch_admin_dashboard(self, kapitan_data):
+        try:
+            self.window.withdraw()
+            from .admin_dashboard import AdminDashboardWindow
+            AdminDashboardWindow(self.engine, kapitan_data, parent_dashboard=self)
+        except Exception as e:
+            self.window.deiconify()
+            messagebox.showerror("System Error", f"Could not launch Admin Dashboard:\n{e}")
+
+    def restore_dashboard(self):
+        self.window.deiconify()
+        self.window.state('zoomed')
+
+    def handle_logout(self):
+        if messagebox.askyesno("Confirm Logout", "Are you sure you want to log out of the Command Center?"):
+            # Update mo muna 'yung logout time sa database!
+            if hasattr(self, 'audit_id'):
+                self.engine.log_user_logout(self.audit_id)
+
+            self.window.destroy()
+            if self.on_logout:
+                self.on_logout()
+
+        # ==========================================
+        # FORCE LOGOUT PAG CLINOSE ANG WINDOW
+        # ==========================================
+    def force_logout_on_close(self):
+            # I-save muna sa database bago mamatay ang system!
+            if hasattr(self, 'audit_id'):
+                print("System closed via X or Alt+F4. Saving exact logout time...")
+                self.engine.log_user_logout(self.audit_id)
+
+            # Tapos tuluyan nang patayin ang window
+            self.window.destroy()
+
+            # Kung may Login Screen ka na gustong pabalikin, tatawagin niya 'to
+            if self.on_logout:
+                self.on_logout()
+
+    # ==========================================
     # PAGE NAVIGATION
     # ==========================================
     def show_blotter_page(self):
@@ -497,3 +665,36 @@ class DashboardWindow:
         self.set_active_tab("analytics")
         ctk.CTkLabel(self.main_frame, text="📊 Analytics Page (Coming Soon)", font=("Arial", 24),
                      text_color=self.text_muted).pack(pady=100)
+
+    # ==========================================
+    # SMART KEYBOARD SHORTCUTS (STAFF)
+    # ==========================================
+    def handle_shortcuts(self, event):
+        # 1. THE SAFETY LOCK: Alamin kung nasa loob ng Textbox o Entry field yung cursor
+        focused_widget = self.window.focus_get()
+        if focused_widget:
+            widget_type = type(focused_widget).__name__
+            # Kung nagta-type sila, i-ignore ang shortcuts!
+            if widget_type in ['CTkEntry', 'CTkTextbox', 'Entry', 'Text']:
+                return
+
+        # 2. THE HOTKEYS
+        key = event.char.lower()  # Gawing lowercase para kahit naka-Capslock, gagana
+
+        if key == '1':
+            print("Shortcut: 1 pressed -> Dashboard")
+            self.show_overview_page()  # Palitan kung iba ang pangalan ng function mo
+        elif key == '2':
+            print("Shortcut: 2 pressed -> Incident Blotter")
+            self.show_blotter_page()  # Palitan kung iba ang pangalan ng function mo
+        elif key == '3':
+            print("Shortcut: 3 pressed -> Resolution")
+            self.show_resolution_page()  # Palitan kung iba ang pangalan ng function mo
+        elif key == 'k':
+            print("Shortcut: K pressed -> Kapitan Panel")
+            # Ilagay dito yung function na nagbubukas nung Kapitan / Profile panel mo
+            if hasattr(self, 'toggle_profile_panel'):
+                self.prompt_admin_access()
+        elif key == 'l':
+            print("Shortcut: L pressed -> Log Out")
+            self.handle_logout()  # Palitan kung iba ang pangalan ng function mo
