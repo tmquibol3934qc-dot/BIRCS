@@ -761,3 +761,66 @@ class DatabaseEngine:
             return True
         except Exception as e:
             return False
+
+    # Hanapin mo yung class DatabaseEngine: tapos i-paste mo 'to sa loob ha?
+    # Wag sa labas, magkaka-error ka na naman! Wag din kalimutan ang proper indentation!
+
+    def log_user_login(self, name, role):
+        try:
+            from datetime import datetime
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            # THE FIX: Gumamit ng get_connection() na swak sa setup mo!
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            query = "INSERT INTO login_audit (employee_name, role, login_time) VALUES (%s, %s, %s)"
+            cursor.execute(query, (name, role, now))
+            conn.commit()
+
+            last_id = cursor.lastrowid
+
+            cursor.close()
+            conn.close()  # Wag kalimutan isara!
+            return last_id
+        except Exception as e:
+            print(f"Audit Log Error: {e}")
+            return None
+
+    def log_user_logout(self, audit_id):
+        if not audit_id: return
+        try:
+            from datetime import datetime
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            # THE FIX AGAIN
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            query = "UPDATE login_audit SET logout_time = %s WHERE audit_id = %s"
+            cursor.execute(query, (now, audit_id))
+            conn.commit()
+
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print(f"Audit Logout Error: {e}")
+
+    def get_login_logs(self):
+        try:
+            # AND THE FIX AGAIN
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            query = "SELECT employee_name, role, login_time, logout_time FROM login_audit ORDER BY login_time DESC"
+            cursor.execute(query)
+
+            columns = [col[0] for col in cursor.description]
+            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+            cursor.close()
+            conn.close()
+            return results
+        except Exception as e:
+            print(f"Error fetching logs: {e}")
+            return []
