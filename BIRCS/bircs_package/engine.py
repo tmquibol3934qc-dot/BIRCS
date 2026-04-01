@@ -162,22 +162,29 @@ class DatabaseEngine:
         except Exception as e:
             return False, f"Error: {e}"
 
-
+        # --- INCIDENTS MANAGEMENT ---
     def save_incident(self, comp, comp_contact, comp_address, resp, resp_contact, resp_address, date, time_str,
                           zone, category, narrative, officer, status):
-            """Auto-generates Case ID and saves the complete blotter record"""
             try:
-                from datetime import datetime
                 conn = self.get_connection()
-                cursor = conn.cursor(dictionary=True)
+                cursor = conn.cursor()
 
+                # Generate new Case ID (e.g., 2026-001)
+                from datetime import datetime
                 current_year = datetime.now().year
                 cursor.execute("SELECT COUNT(*) as total FROM incidents WHERE YEAR(created_at) = %s", (current_year,))
                 result = cursor.fetchone()
-                next_number = result['total'] + 1
+
+                # Safe checking in case dictionary cursor returns differently
+                total_cases = result['total'] if isinstance(result, dict) else result[0]
+                next_number = total_cases + 1
                 new_case_id = f"{current_year}-{next_number:03d}"
 
-                # THE FIX: Added category to the INSERT query!
+                # ==========================================
+                # THE FIX: Binalik ko na yung mga nawawalang columns!
+                # Siguraduhin lang na itong mga pangalan ng columns na 'to
+                # (complainant_contact, respondent_contact, etc.) ay sakto sa MySQL Workbench mo ah!
+                # ==========================================
                 query = """
                     INSERT INTO incidents (
                         case_no, complainant_name, complainant_contact, complainant_address, 
@@ -186,7 +193,7 @@ class DatabaseEngine:
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
 
-                # THE FIX: Added category to the values tuple!
+                # 14 values para sa 14 na %s! Wala nang kulang!
                 values = (
                     new_case_id, comp, comp_contact, comp_address,
                     resp, resp_contact, resp_address,
@@ -196,9 +203,7 @@ class DatabaseEngine:
                 cursor.execute(query, values)
                 conn.commit()
                 conn.close()
-
                 return True, new_case_id
-
             except Exception as e:
                 print(f"Error saving incident: {e}")
                 return False, str(e)
