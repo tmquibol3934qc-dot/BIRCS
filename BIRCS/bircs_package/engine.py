@@ -14,12 +14,13 @@ class DatabaseEngine:
         }
 
         # Test connection on startup
+        # Test connection on startup
         try:
             conn = self.get_connection()
             conn.close()
-            print("✅ Successfully connected to MySQL!")
+            print("[SUCCESS] Successfully connected to MySQL!")
         except Exception as e:
-            print(f"❌ Error connecting to MySQL: {e}")
+            print(f"[ERROR] Error connecting to MySQL: {e}")
             messagebox.showerror("Database Error", f"Could not connect to MySQL.\nError: {e}")
 
     def get_connection(self):
