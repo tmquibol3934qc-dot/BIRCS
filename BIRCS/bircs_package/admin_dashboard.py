@@ -11,31 +11,20 @@ class AdminDashboardWindow:
 
         self.window = ctk.CTkToplevel()
         self.window.title("BICRS - Kapitan Control Center")
-        self.window.attributes('-fullscreen', True)
+        
+        # --- BRUTE FORCE FULLSCREEN ---
+        screen_width = self.window.winfo_screenwidth()
+        screen_height = self.window.winfo_screenheight()
+        self.window.overrideredirect(True)
+        self.window.geometry(f"{screen_width}x{screen_height}+0+0")
+        # ------------------------------
+
         self.window.bind("<Key>", self.handle_shortcuts)
         self.window.configure(fg_color="#F4F7F6")
 
         self.primary = "#27AE60"
         self.dark_green = "#1E8449"
-        self.green = "#27AE60"
-        self.bg_color = "#F4F7F6"
-        self.text_dark = "#2B2B2B"
-        self.text_muted = "#7A7A7A"
-        self.red = "#E74C3C"
-        self.orange = "#E79124"
-        self.blue = "#3F51B5"
-
-        user_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}".strip()
-        user_role = self.user.get('role', 'Kapitan')  # Siguraduhing Kapitan ang lalabas sa role
-
-        # Save agad sa database pag-open!
-        self.audit_id = self.engine.log_user_login(user_name, user_role)
-
-        # Saluhin din natin yung "X" button or Alt+F4 ni Kapitan
-        self.window.protocol("WM_DELETE_WINDOW", self.force_logout_on_close)
-
-        self.setup_layout()
-        self.show_master_dashboard()
+        # ... (tuloy-tuloy na pababa yung lumang code mo) ...
 
     def setup_layout(self):
         self.sidebar = ctk.CTkFrame(self.window, width=250, corner_radius=0, fg_color="#2C3E50")
