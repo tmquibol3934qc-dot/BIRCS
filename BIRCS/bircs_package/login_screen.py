@@ -78,16 +78,13 @@ class LoginWindow:
         self.user_entry.bind('<Return>', lambda event: self.handle_login())
 
         self.pass_entry, self.eye_btn = self.create_password_field(card, "Enter your password")
+        self.pass_entry.bind('<Return>', lambda event: self.handle_login())
 
+        # ==========================================
+        # THE FIX: Goodbye "Remember Me" checkbox!
+        # ==========================================
         opts_frame = ctk.CTkFrame(card, fg_color="white")
         opts_frame.pack(pady=(5, 20), padx=40, fill="x")
-
-        self.rem_var = ctk.BooleanVar()
-        chk = ctk.CTkCheckBox(opts_frame, text="Remember Me", variable=self.rem_var,
-                              font=(self.ui_font, 11), text_color="gray",
-                              fg_color=self.color_orange, hover_color="#C67B1D",
-                              border_color="gray", border_width=1, corner_radius=3)
-        chk.pack(side="left")
 
         forgot = ctk.CTkLabel(opts_frame, text="Forgot Password?",
                               font=(self.ui_font, 11, "bold"), text_color=self.color_orange, cursor="hand2")
@@ -135,7 +132,6 @@ class LoginWindow:
             entry.configure(show='*')
             btn.configure(text="👁")
 
-    # --- UPGRADED LOGIN LOGIC ---
     def handle_login(self):
         u = self.user_entry.get().strip()
         p = self.pass_entry.get().strip()
@@ -153,10 +149,13 @@ class LoginWindow:
             fname = user_data.get('first_name', '')
             lname = user_data.get('last_name', '')
 
+            full_name = f"{fname} {lname}".strip()
+            audit_id = self.engine.log_user_login(full_name, role)
+            user_data['audit_id'] = audit_id
+
             messagebox.showinfo("Login Success", f"Welcome back, {role.title()} {fname} {lname}!")
             self.root.withdraw()
 
-            # --- THE BULLETPROOF IMPORTS FIX ---
             try:
                 if role.lower() == "kapitan" or role.lower() == "admin":
                     try:
@@ -212,17 +211,12 @@ class LoginWindow:
         except Exception as e:
             messagebox.showerror("Error", f"Could not load screen: {e}")
 
-    # ==========================================
-    # CONFIRM EXIT SA LOGIN SCREEN
-    # ==========================================
     def confirm_exit(self):
-        # Maglalabas 'to ng popup na may Yes or No
         response = messagebox.askyesno(
             "Exit Application",
             "Are you sure you want to close the BICRS system?"
         )
 
-        # Kung nag-Yes siya, patayin ang window. Kung No, walang mangyayari.
         if response:
             print("System shutting down gracefully...")
             self.root.destroy()
