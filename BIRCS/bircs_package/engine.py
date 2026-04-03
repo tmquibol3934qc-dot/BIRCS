@@ -830,3 +830,52 @@ class DatabaseEngine:
         except Exception as e:
             print(f"Error fetching logs: {e}")
             return []
+
+    def log_security_event(self, user_id, action, details):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            query = "INSERT INTO security_logs (user_id, action_type, details) VALUES (%s, %s, %s)"
+            cursor.execute(query, (user_id, action, details))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Security Logging Error: {e}")
+
+    # ==========================================
+    # SECURITY ALERTS LOGIC (TAGA-BASA AT TAGA-UPDATE)
+    # ==========================================
+    def get_security_logs(self):
+        """Kukunin lahat ng security alerts, pinakabago sa taas"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # Kukunin natin lahat from security_logs table
+            query = "SELECT * FROM security_logs ORDER BY created_at DESC"
+            cursor.execute(query)
+
+            # Kung naka-dictionary cursor ka na sa __init__, ito na 'yun
+            logs = cursor.fetchall()
+            conn.close()
+            return logs
+        except Exception as e:
+            print(f"Error fetching security logs: {e}")
+            return []
+
+    def mark_security_log_read(self, log_id):
+        """Gagawing 'read' yung notification pag kinlick ni Kapitan"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # I-u-update yung is_read column to 1 (True)
+            query = "UPDATE security_logs SET is_read = 1 WHERE log_id = %s"
+            cursor.execute(query, (log_id,))
+            conn.commit()
+
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error marking log as read: {e}")
+            return False
