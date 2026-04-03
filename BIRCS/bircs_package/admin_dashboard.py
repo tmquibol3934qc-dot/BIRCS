@@ -29,7 +29,7 @@ class AdminDashboardWindow:
         user_role = self.user.get('role', 'Kapitan')
 
         # Save agad sa database pag-open!
-
+        self.audit_id = self.engine.log_user_login(user_name, user_role)
         # Saluhin natin yung "X" button or Alt+F4 ni Kapitan
         self.window.protocol("WM_DELETE_WINDOW", self.force_logout_on_close)
 
