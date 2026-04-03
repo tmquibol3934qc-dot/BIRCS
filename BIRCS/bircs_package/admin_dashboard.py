@@ -68,6 +68,14 @@ class AdminDashboardWindow:
                                       anchor="w", command=self.show_login_logs)
         self.btn_logs.pack(fill="x", padx=15, pady=5)
 
+        # ==========================================
+        # THE FIX: Idinagdag ang Security Alerts Button!
+        # ==========================================
+        self.btn_alerts = ctk.CTkButton(self.sidebar, text="🚨 Security Alerts", font=("Arial", 14, "bold"),
+                                        fg_color="transparent", text_color=self.red, hover_color=self.dark_green,
+                                        anchor="w", command=self.show_security_alerts)
+        self.btn_alerts.pack(fill="x", padx=15, pady=5)
+
         self.btn_analytics = ctk.CTkButton(self.sidebar, text="📊 Deep Analytics", font=("Arial", 14, "bold"),
                                            fg_color="transparent", text_color="white", hover_color=self.dark_green,
                                            anchor="w")
@@ -79,6 +87,18 @@ class AdminDashboardWindow:
 
         self.main_frame = ctk.CTkFrame(self.window, fg_color="transparent")
         self.main_frame.pack(side="right", fill="both", expand=True)
+
+    def clear_main_frame(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+
+    def set_active_tab(self, tab_name):
+        self.btn_master.configure(fg_color=self.primary if tab_name == "master" else "transparent")
+        self.btn_team.configure(fg_color=self.primary if tab_name == "users" else "transparent")
+        self.btn_logs.configure(fg_color=self.primary if tab_name == "logs" else "transparent")
+        # Dagdag natin yung behavior ng kulay para sa alerts
+        self.btn_alerts.configure(fg_color=self.primary if tab_name == "alerts" else "transparent")
+        self.btn_analytics.configure(fg_color=self.primary if tab_name == "analytics" else "transparent")
 
     def clear_main_frame(self):
         for widget in self.main_frame.winfo_children():
@@ -510,6 +530,24 @@ class AdminDashboardWindow:
         for log in logs:
             self.build_log_row(self.logs_container, log)
 
+        # ==========================================
+        # 5. SECURITY ALERTS TAB
+        # ==========================================
+    def show_security_alerts(self):
+            self.clear_main_frame()
+            self.set_active_tab("alerts")
+
+            # Dito natin i-i-import yung bagong file mo para safe at malinis!
+            try:
+                try:
+                    from bircs_package.security_alerts_page import SecurityAlertsPage
+                except ImportError:
+                    from security_alerts_page import SecurityAlertsPage
+
+                SecurityAlertsPage(self.main_frame, self.engine)
+            except Exception as e:
+                messagebox.showerror("UI Error", f"Could not load Security Alerts Page: {e}")
+
     def build_log_row(self, parent, log):
         row = ctk.CTkFrame(parent, fg_color="white", corner_radius=5, height=45)
         row.pack(fill="x", pady=2, padx=10)
@@ -611,6 +649,9 @@ class AdminDashboardWindow:
         elif key == '3':
             print("Shortcut: 3 pressed -> System Logs")
             self.show_login_logs()
+        elif key == '4':
+            print("Shortcut: 4 pressed -> Security Alerts")
+            self.show_security_alerts()
         elif key == 'l':
             print("Shortcut: L pressed -> Lock and Exit")
             self.lock_and_exit()
