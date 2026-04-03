@@ -434,65 +434,71 @@ class DatabaseEngine:
             print(f"CRITICAL DB ERROR: {e}")
             return False
 
-
-    def get_resolution_suggestion(self, new_narrative, zone, category):
-            """Uses NLP to find the best matching past settlements based on Zone and Category"""
+        # ==========================================
+        # AI SMART SUGGESTION ENGINE (FIXED TABLE NAME)
+        # ==========================================
+    def get_resolution_suggestion(self, narrative, zone, category):
+            import difflib
             try:
-                from sklearn.feature_extraction.text import TfidfVectorizer
-                from sklearn.metrics.pairwise import cosine_similarity
+                print(f"\n--- AI DEBUG START ---")
+                print(f"Searching for: Category='{category}' in table 'incidents'")
 
                 conn = self.get_connection()
+                # Siguraduhing Dictionary=True para gumana yung .get()
                 cursor = conn.cursor(dictionary=True)
 
-                # THE FIX: We now filter by BOTH zone and category! This makes it way faster and more accurate!
+                # THE FIX: Pinalitan ang incident_blotter ng 'incidents'
                 query = """
-                        SELECT narrative, settlement_details
-                        FROM incidents
-                        WHERE status = 'Resolved' 
-                          AND zone = %s
-                          AND category = %s
-                          AND settlement_details IS NOT NULL 
-                          AND settlement_details != '' 
-                        """
-                cursor.execute(query, (zone, category))
+                    SELECT narrative, settlement_details 
+                    FROM incidents 
+                    WHERE status = 'Resolved' AND category = %s
+                """
+                cursor.execute(query, (category,))
                 past_cases = cursor.fetchall()
                 conn.close()
 
+                print(f"Found {len(past_cases)} resolved cases.")
+
                 if not past_cases:
-                    return []  # Return empty if no cases match this zone/category combo
-
-                narratives = [case['narrative'] for case in past_cases]
-                narratives.append(new_narrative)
-
-                custom_stop_words = [
-                    "ang", "mga", "sa", "na", "ng", "ay", "at", "kung", "may",
-                    "para", "naman", "ba", "ito", "iyon", "dito", "doon",
-                    "pa", "ako", "ikaw", "siya", "kami", "kayo", "sila",
-                    "din", "rin", "po", "opo", "ni", "nila", "namin", "ninyo", "niyo",
-                    "the", "and", "is", "in", "to", "of", "it", "that", "this"
-                ]
-
-                vectorizer = TfidfVectorizer(stop_words=custom_stop_words)
-                tfidf_matrix = vectorizer.fit_transform(narratives)
-
-                cosine_similarities = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1]).flatten()
-                top_indices = cosine_similarities.argsort()[::-1][:5]
+                    return []
 
                 suggestions = []
-                for idx in top_indices:
-                    score = cosine_similarities[idx]
-                    if score >= 0.40:
-                        pct = int(score * 100)
-                        settlement = past_cases[idx]['settlement_details'].strip()
+                for case in past_cases:
+                    past_narrative = case.get('narrative', '')
+                    settlement = case.get('settlement_details', '')
+
+                    if not past_narrative or not settlement:
+                        continue
+
+                    # Compute Similarity using SequenceMatcher
+                    similarity = difflib.SequenceMatcher(None, narrative.lower(), past_narrative.lower()).ratio()
+                    match_percentage = int(similarity * 100)
+
+                    # Filter: Ipakita lang ang 40% pataas (QA requirement)
+                    if match_percentage >= 40:
                         suggestions.append({
-                            "match": pct,
-                            "text": settlement
+                            'text': settlement,
+                            'score': match_percentage
                         })
 
-                return suggestions
+                # Sort: Pinakamataas na match ang nasa taas
+                suggestions.sort(key=lambda x: x['score'], reverse=True)
+
+                # Return Top 3 unique suggestions
+                unique_suggestions = []
+                seen_texts = set()
+                for s in suggestions:
+                    if s['text'] not in seen_texts:
+                        unique_suggestions.append(s)
+                        seen_texts.add(s['text'])
+                    if len(unique_suggestions) >= 3:
+                        break
+
+                print(f"--- AI DEBUG END ---\n")
+                return unique_suggestions
 
             except Exception as e:
-                print(f"AI Search Error: {e}")
+                print(f"AI Suggestion Error: {e}")
                 return []
 
     def get_next_case_id(self):
@@ -879,3 +885,17 @@ class DatabaseEngine:
         except Exception as e:
             print(f"Error marking log as read: {e}")
             return False
+
+    def paraphrase_logic(self, old_settlement, comp_name, resp_name):
+        # Ang goal dito: Palitan yung generic terms ng real names
+        new_text = old_settlement
+
+        # Handle lowercase
+        new_text = new_text.replace("respondent", resp_name)
+        new_text = new_text.replace("complainant", comp_name)
+
+        # Handle Capitalized
+        new_text = new_text.replace("Respondent", resp_name)
+        new_text = new_text.replace("Complainant", comp_name)
+
+        return new_text
