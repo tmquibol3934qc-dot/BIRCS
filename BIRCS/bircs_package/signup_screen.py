@@ -85,6 +85,25 @@ class SignupWindow:
         ctk.CTkLabel(top_bar, text="🏛 BIRCS", font=("Arial", 20, "bold"), text_color="white").pack(side="left", padx=10)
 
     # =========================================================================
+    # THE BOUNCER: Limit Character Input Logic (FIXED FOR CTkEntry)
+    # =========================================================================
+    def limit_input(self, entry, limit, num_only, no_num):
+        val = entry.get()
+        new_val = val
+        if num_only:
+            new_val = "".join([c for c in val if c.isdigit()])
+        elif no_num:
+            new_val = "".join([c for c in val if not c.isdigit()])
+
+        if len(new_val) > limit:
+            new_val = new_val[:limit]
+
+        # THE FIX: CTkEntry uses delete and insert, NOT set()!
+        if val != new_val:
+            entry.delete(0, "end")
+            entry.insert(0, new_val)
+
+    # =========================================================================
     # STEP 1: PERSONAL INFORMATION & RFID
     # =========================================================================
     def build_step_1(self):
@@ -98,31 +117,39 @@ class SignupWindow:
         grid_frame = ctk.CTkFrame(self.step1_frame, fg_color="white")
         grid_frame.pack(padx=20, fill="x")
 
-        self.fname_entry = self.create_box(grid_frame, "First Name", 0, 0)
-        self.mname_entry = self.create_box(grid_frame, "Middle Name", 0, 1)
-        self.lname_entry = self.create_box(grid_frame, "Last Name", 1, 0)
-        self.contact_entry = self.create_box(grid_frame, "Contact No. (11 digits)", 1, 1)
-        self.pos_entry = self.create_box(grid_frame, "Position", 2, 0)
-        self.emp_id_entry = self.create_box(grid_frame, "Employee ID (Nums Only)", 2, 1)
+        # THE FIX: Added strict limits and validation to entries!
+        self.fname_entry = self.create_box(grid_frame, "First Name", 0, 0, limit=50, no_num=True)
+        self.mname_entry = self.create_box(grid_frame, "Middle Name", 0, 1, limit=50, no_num=True)
+        self.lname_entry = self.create_box(grid_frame, "Last Name", 1, 0, limit=50, no_num=True)
 
-        self.addr_entry = self.create_full_width_box(self.step1_frame, "Address (Unit No. /Subdivision/Village/Purok)")
+        # THE FIX: Strictly limit to 11 digits max!
+        self.contact_entry = self.create_box(grid_frame, "Contact No. (11 digits)", 1, 1, limit=11, num_only=True)
+
+        self.pos_entry = self.create_box(grid_frame, "Position", 2, 0, limit=50)
+        self.emp_id_entry = self.create_box(grid_frame, "Employee ID (Nums Only)", 2, 1, limit=20, num_only=True)
+
+        self.addr_entry = self.create_full_width_box(self.step1_frame, "Address (Unit No. /Subdivision/Village/Purok)",
+                                                     limit=100)
 
         # --- NEW: RFID FIELD ---
         ctk.CTkLabel(self.step1_frame, text="Tap RFID Card Here:", font=(self.ui_font, 12, "bold"),
                      text_color="gray").pack(pady=(10, 0))
-        self.rfid_entry = self.create_full_width_box(self.step1_frame, "Click box & Tap Card...")
+        self.rfid_entry = self.create_full_width_box(self.step1_frame, "Click box & Tap Card...", limit=30)
 
         # --- PASSWORD SECTION ---
-        self.pass_entry = self.create_full_width_box(self.step1_frame, "Create Password", is_pass=True)
+        self.pass_entry = self.create_full_width_box(self.step1_frame, "Create Password", is_pass=True, limit=50)
         self.criteria_frame = ctk.CTkFrame(self.step1_frame, fg_color="white")
         self.criteria_frame.pack(pady=(0, 10))
-        self.lbl_upper = self.create_criteria_label(self.criteria_frame, "• Uppercase", 0, 0)
-        self.lbl_lower = self.create_criteria_label(self.criteria_frame, "• Lowercase", 0, 1)
+
+        self.lbl_len = self.create_criteria_label(self.criteria_frame, "• 8+ Characters", 0, 0)
+        self.lbl_upper = self.create_criteria_label(self.criteria_frame, "• Uppercase", 0, 1)
+        self.lbl_lower = self.create_criteria_label(self.criteria_frame, "• Lowercase", 0, 2)
         self.lbl_num = self.create_criteria_label(self.criteria_frame, "• Number", 1, 0)
         self.lbl_spec = self.create_criteria_label(self.criteria_frame, "• Special Char", 1, 1)
+
         self.pass_entry.bind("<KeyRelease>", self.check_password_strength)
 
-        self.c_pass_entry = self.create_full_width_box(self.step1_frame, "Confirm Password", is_pass=True)
+        self.c_pass_entry = self.create_full_width_box(self.step1_frame, "Confirm Password", is_pass=True, limit=50)
 
         self.create_upload_box(self.step1_frame)
 
@@ -138,18 +165,27 @@ class SignupWindow:
 
     def check_password_strength(self, event):
         pwd = self.pass_entry.get()
+
+        if len(pwd) >= 8:
+            self.lbl_len.configure(text_color=self.color_green)
+        else:
+            self.lbl_len.configure(text_color=self.color_red)
+
         if re.search(r"[A-Z]", pwd):
             self.lbl_upper.configure(text_color=self.color_green)
         else:
             self.lbl_upper.configure(text_color=self.color_red)
+
         if re.search(r"[a-z]", pwd):
             self.lbl_lower.configure(text_color=self.color_green)
         else:
             self.lbl_lower.configure(text_color=self.color_red)
+
         if re.search(r"\d", pwd):
             self.lbl_num.configure(text_color=self.color_green)
         else:
             self.lbl_num.configure(text_color=self.color_red)
+
         if re.search(r"[!@#$%^&*(),.?\":{}|<>]", pwd):
             self.lbl_spec.configure(text_color=self.color_green)
         else:
@@ -174,12 +210,18 @@ class SignupWindow:
         content_frame = ctk.CTkFrame(self.step2_frame, fg_color="white")
         content_frame.pack(padx=30, fill="x", pady=10)
 
-        q_list = ["What is your mother's maiden name?", "What was the name of your first pet?",
-                  "What city were you born in?", "What is your favorite food?",
-                  "What is the name of your elementary school?"]
-        self.q1_var, self.ans1_entry = self.create_security_group(content_frame, "Question 1", q_list)
-        self.q2_var, self.ans2_entry = self.create_security_group(content_frame, "Question 2", q_list)
-        self.q3_var, self.ans3_entry = self.create_security_group(content_frame, "Question 3", q_list)
+        self.q_list = ["What is your mother's maiden name?", "What was the name of your first pet?",
+                       "What city were you born in?", "What is your favorite food?",
+                       "What is the name of your elementary school?"]
+
+        self.q1_var, self.q1_menu, self.ans1_entry = self.create_security_group(content_frame, "Question 1",
+                                                                                self.q_list[0])
+        self.q2_var, self.q2_menu, self.ans2_entry = self.create_security_group(content_frame, "Question 2",
+                                                                                self.q_list[1])
+        self.q3_var, self.q3_menu, self.ans3_entry = self.create_security_group(content_frame, "Question 3",
+                                                                                self.q_list[2])
+
+        self.update_security_dropdowns()
 
         self.terms_var = ctk.BooleanVar(value=False)
         self.terms_chk = ctk.CTkCheckBox(self.step2_frame, text="I accept the Terms of Agreement",
@@ -194,20 +236,43 @@ class SignupWindow:
                                 font=(self.ui_font, 14, "bold"), command=self.handle_register)
         reg_btn.pack(pady=(0, 40))
 
-    # --- HELPERS ---
-    def create_box(self, parent, placeholder, r, c):
+    # --- Smart Dropdown Logic ---
+    def update_security_dropdowns(self, *args):
+        s1 = self.q1_var.get()
+        s2 = self.q2_var.get()
+        s3 = self.q3_var.get()
+
+        l1 = [q for q in self.q_list if q == s1 or (q != s2 and q != s3)]
+        l2 = [q for q in self.q_list if q == s2 or (q != s1 and q != s3)]
+        l3 = [q for q in self.q_list if q == s3 or (q != s1 and q != s2)]
+
+        self.q1_menu.configure(values=l1)
+        self.q2_menu.configure(values=l2)
+        self.q3_menu.configure(values=l3)
+
+    # --- HELPERS (THE PLACEHOLDER COLOR FIX) ---
+    def create_box(self, parent, placeholder, r, c, limit=50, num_only=False, no_num=False):
         entry = ctk.CTkEntry(parent, width=210, height=40, border_width=2, border_color="black",
-                             fg_color="white", text_color="black", placeholder_text=placeholder,
+                             fg_color="white", text_color="black",
+                             placeholder_text=placeholder,
+                             placeholder_text_color="gray",
                              font=(self.ui_font, 12), corner_radius=0)
         entry.grid(row=r, column=c, padx=5, pady=10)
+
+        entry.bind("<KeyRelease>", lambda e: self.limit_input(entry, limit, num_only, no_num))
         return entry
 
-    def create_full_width_box(self, parent, placeholder, is_pass=False):
+    def create_full_width_box(self, parent, placeholder, is_pass=False, limit=50):
         entry = ctk.CTkEntry(parent, width=440, height=40, border_width=2, border_color="black",
-                             fg_color="white", text_color="black", placeholder_text=placeholder,
+                             fg_color="white", text_color="black",
+                             placeholder_text=placeholder,
+                             placeholder_text_color="gray",
                              font=(self.ui_font, 12), corner_radius=0)
-        if is_pass: entry.configure(show="*")
+        if is_pass:
+            entry.configure(show="*")
         entry.pack(pady=10)
+
+        entry.bind("<KeyRelease>", lambda e: self.limit_input(entry, limit, False, False))
         return entry
 
     def create_upload_box(self, parent):
@@ -219,22 +284,28 @@ class SignupWindow:
         self.upload_btn.pack(pady=10)
         self.selected_file_path = None
 
-    def create_security_group(self, parent, label_text, options):
+    def create_security_group(self, parent, label_text, default_val):
         ctk.CTkLabel(parent, text=label_text, font=(self.ui_font, 12, "bold"), text_color="black").pack(anchor="w",
                                                                                                         pady=(10, 2))
-        var = ctk.StringVar(value=options[0])
+
+        var = ctk.StringVar(value=default_val)
         wrapper = ctk.CTkFrame(parent, fg_color="white", border_width=2, border_color="black")
         wrapper.pack(fill="x", pady=(0, 5))
-        menu = ctk.CTkOptionMenu(wrapper, variable=var, values=options, fg_color="white", text_color="black",
+
+        menu = ctk.CTkOptionMenu(wrapper, variable=var, values=self.q_list, fg_color="white", text_color="black",
                                  button_color="white", button_hover_color="#EEE", dropdown_fg_color="white",
-                                 dropdown_text_color="black",
-                                 font=(self.ui_font, 12), corner_radius=0)
+                                 dropdown_text_color="black", font=(self.ui_font, 12), corner_radius=0,
+                                 command=self.update_security_dropdowns)
         menu.pack(fill="x", padx=2, pady=2)
+
         ctk.CTkLabel(parent, text="Answer", font=(self.ui_font, 11), text_color="gray").pack(anchor="w")
+
         ans_entry = ctk.CTkEntry(parent, height=35, border_width=1, border_color="gray",
                                  fg_color="#F9F9F9", text_color="black", font=(self.ui_font, 12))
         ans_entry.pack(fill="x", pady=(0, 10))
-        return var, ans_entry
+        ans_entry.bind("<KeyRelease>", lambda e: self.limit_input(ans_entry, 100, False, False))
+
+        return var, menu, ans_entry
 
     def select_file(self):
         filename = filedialog.askopenfilename(title="Select ID",
@@ -255,24 +326,26 @@ class SignupWindow:
         if not self.fname_entry.get() or not self.lname_entry.get() or not self.pass_entry.get():
             messagebox.showerror("Missing Info", "Please fill in all required fields.")
             return
+
+        # THE FIX: Require exactly 11 digits
         contact = self.contact_entry.get()
-        if not contact.isdigit() or len(contact) != 11:
-            messagebox.showerror("Invalid Contact", "Contact number must be exactly 11 digits.")
+        if len(contact) != 11:
+            messagebox.showerror("Invalid Contact", "Contact number must be EXACTLY 11 digits.")
             return
+
         emp_id = self.emp_id_entry.get()
         if not emp_id.isdigit():
             messagebox.showerror("Invalid ID", "Employee ID must contain numbers only.")
             return
-        if any(char.isdigit() for char in self.fname_entry.get()) or any(
-                char.isdigit() for char in self.lname_entry.get()):
-            messagebox.showerror("Invalid Name", "Names cannot contain numbers.")
-            return
+
         if not self.is_password_valid():
             messagebox.showerror("Weak Password", "Password does not meet the requirements.")
             return
+
         if self.pass_entry.get() != self.c_pass_entry.get():
             messagebox.showerror("Password Error", "Passwords do not match.")
             return
+
         self.step1_frame.pack_forget()
         self.step2_frame.pack(fill="both", expand=True)
         self.current_step = 2
@@ -379,7 +452,6 @@ class SignupWindow:
             messagebox.showinfo("Success", message)
             self.window.destroy()
 
-            # THE FIX: If Admin opened it, refresh the list. If Login opened it, un-hide Login!
             if self.is_admin_mode and self.on_refresh:
                 self.on_refresh()
             elif not self.is_admin_mode:
@@ -389,10 +461,5 @@ class SignupWindow:
 
     def on_close(self):
         self.window.destroy()
-        # THE FIX: Only un-hide the login screen if we ARE NOT in Admin Mode
         if not self.is_admin_mode:
             self.parent_root.deiconify()
-
-    def on_close(self):
-        self.window.destroy()
-        self.login_root.deiconify()
