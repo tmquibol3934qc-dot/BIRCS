@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
 from datetime import datetime
+import math
 from .incident_blotter import IncidentBlotterPage
 from .resolution_page import ResolutionPage
 
@@ -18,6 +19,8 @@ class DashboardWindow:
         self.window.state('zoomed')
         self.window.protocol("WM_DELETE_WINDOW", self.force_logout_on_close)
         self.window.bind("<Key>", self.handle_shortcuts)
+
+        # Colors
         self.bg_color = "#F4F7F6"
         self.sidebar_color = "#FFFFFF"
         self.text_dark = "#2B2B2B"
@@ -28,13 +31,13 @@ class DashboardWindow:
         self.red = "#EB5757"
 
         # ==========================================
-        # TIMER & AUDIT INIT LOGIC
+        # TIMER, AUDIT & CACHE INIT LOGIC
         # ==========================================
         self.login_time = datetime.now()
-
-        # THE FIX: Kukunin na lang natin yung audit_id mula sa login screen
-        # para hindi mag-doble yung log natin sa database!
         self.audit_id = self.user.get('audit_id')
+
+        # THE FIX: Dito itatago ni Python yung mga pages para mabilis lumipat!
+        self.page_cache = {}
 
         self.window.grid_columnconfigure(1, weight=1)
         self.window.grid_rowconfigure(0, weight=1)
@@ -100,9 +103,11 @@ class DashboardWindow:
                     self.account_panel.place_forget()
                     self.panel_visible = False
 
-    def clear_main_frame(self):
+    def hide_all_pages(self):
+        # Imbes na destroy(), itatago lang natin para mabilis lumipat ng tabs!
         for widget in self.main_frame.winfo_children():
-            widget.destroy()
+            widget.pack_forget()
+            widget.grid_forget()
 
     # ==========================================
     # FLOATING PROFILE PANEL & TIMER LOGIC
@@ -116,10 +121,8 @@ class DashboardWindow:
         )
         self.profile_btn.place(relx=0.98, rely=0.02, anchor="ne")
 
-        self.account_panel = ctk.CTkFrame(
-            self.window, width=250, corner_radius=10,
-            fg_color="white", border_width=1, border_color="#E0E0E0"
-        )
+        self.account_panel = ctk.CTkFrame(self.window, width=250, corner_radius=10, fg_color="white", border_width=1,
+                                          border_color="#E0E0E0")
         self.panel_visible = False
 
         header_frame = ctk.CTkFrame(self.account_panel, fg_color=self.primary, corner_radius=10)
@@ -132,25 +135,27 @@ class DashboardWindow:
         emp_no = self.user.get('employee_id', 'EMP-Default')
         role = self.user_role
 
-        ctk.CTkLabel(self.account_panel, text="Name:", font=("Arial", 10), text_color=self.text_muted).pack(
-            anchor="w", padx=15, pady=(10, 0))
-        ctk.CTkLabel(self.account_panel, text=user_name, font=("Arial", 12, "bold"),
-                     text_color=self.text_dark).pack(anchor="w", padx=15)
+        ctk.CTkLabel(self.account_panel, text="Name:", font=("Arial", 10), text_color=self.text_muted).pack(anchor="w",
+                                                                                                            padx=15,
+                                                                                                            pady=(10,
+                                                                                                                  0))
+        ctk.CTkLabel(self.account_panel, text=user_name, font=("Arial", 12, "bold"), text_color=self.text_dark).pack(
+            anchor="w", padx=15)
 
-        ctk.CTkLabel(self.account_panel, text="Employee Number:", font=("Arial", 10),
-                     text_color=self.text_muted).pack(anchor="w", padx=15, pady=(5, 0))
+        ctk.CTkLabel(self.account_panel, text="Employee Number:", font=("Arial", 10), text_color=self.text_muted).pack(
+            anchor="w", padx=15, pady=(5, 0))
         ctk.CTkLabel(self.account_panel, text=emp_no, font=("Arial", 12, "bold"), text_color=self.text_dark).pack(
             anchor="w", padx=15)
 
         ctk.CTkLabel(self.account_panel, text="Position:", font=("Arial", 10), text_color=self.text_muted).pack(
             anchor="w", padx=15, pady=(5, 0))
-        ctk.CTkLabel(self.account_panel, text=role.upper(), font=("Arial", 12, "bold"),
-                     text_color=self.primary).pack(anchor="w", padx=15)
+        ctk.CTkLabel(self.account_panel, text=role.upper(), font=("Arial", 12, "bold"), text_color=self.primary).pack(
+            anchor="w", padx=15)
 
         ctk.CTkFrame(self.account_panel, height=1, fg_color="#E0E0E0").pack(fill="x", padx=15, pady=10)
 
-        ctk.CTkLabel(self.account_panel, text="Session Started:", font=("Arial", 10),
-                     text_color=self.text_muted).pack(anchor="w", padx=15)
+        ctk.CTkLabel(self.account_panel, text="Session Started:", font=("Arial", 10), text_color=self.text_muted).pack(
+            anchor="w", padx=15)
         self.timer_label = ctk.CTkLabel(self.account_panel, text="Just now", font=("Arial", 12, "bold"),
                                         text_color=self.green)
         self.timer_label.pack(anchor="w", padx=15, pady=(0, 10))
@@ -163,8 +168,7 @@ class DashboardWindow:
         ctk.CTkButton(self.account_panel, text="Log Out", fg_color="transparent", text_color=self.red,
                       hover_color="#FEEEEE", font=("Arial", 12, "bold"), command=self.handle_logout).pack(fill="x",
                                                                                                           padx=10,
-                                                                                                          pady=(0,
-                                                                                                                15))
+                                                                                                          pady=(0, 15))
 
     def toggle_profile_panel(self):
         if self.panel_visible:
@@ -195,18 +199,26 @@ class DashboardWindow:
     # OVERVIEW DASHBOARD
     # ==========================================
     def show_overview_page(self):
-        self.clear_main_frame()
+        self.hide_all_pages()
         self.set_active_tab("dashboard")
+
+        # Lagi nating ide-destroy ang lumang dashboard cache para mag-update yung "Total Cases" Count!
+        if "dashboard" in self.page_cache:
+            self.page_cache["dashboard"].destroy()
+
+        dashboard_container = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        dashboard_container.pack(fill="both", expand=True)
+        self.page_cache["dashboard"] = dashboard_container
 
         db_stats = self.engine.get_dashboard_stats()
         db_analytics = self.engine.get_incident_analytics()
 
-        header_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        header_frame = ctk.CTkFrame(dashboard_container, fg_color="transparent")
         header_frame.pack(fill="x", padx=30, pady=(30, 15))
         ctk.CTkLabel(header_frame, text="Command Center Dashboard", font=("Arial", 24, "bold"),
                      text_color=self.text_dark).pack(side="left")
 
-        stats_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        stats_frame = ctk.CTkFrame(dashboard_container, fg_color="transparent")
         stats_frame.pack(fill="x", padx=25)
 
         self.create_stat_card(stats_frame, "Total Cases", str(db_stats['Total Cases']), self.primary)
@@ -214,7 +226,7 @@ class DashboardWindow:
         self.create_stat_card(stats_frame, "Resolved", str(db_stats['Resolved']), self.green)
         self.create_stat_card(stats_frame, "Urgent", str(db_stats['Urgent']), self.red)
 
-        body_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        body_frame = ctk.CTkFrame(dashboard_container, fg_color="transparent")
         body_frame.pack(fill="both", expand=True, padx=30, pady=20)
         body_frame.grid_columnconfigure(0, weight=3)
         body_frame.grid_columnconfigure(1, weight=1)
@@ -240,9 +252,12 @@ class DashboardWindow:
         ctk.CTkLabel(card, text=title, font=("Arial", 12), text_color=self.text_muted).pack()
 
     # ==========================================
-    # TABLE & LIVE FILTERING
+    # TABLE, PAGINATION & DEBOUNCED SEARCH
     # ==========================================
     def build_table(self, container):
+        self.current_page = 1
+        self.items_per_page = 10  # Rows per page
+
         top_ctrls = ctk.CTkFrame(container, fg_color="transparent")
         top_ctrls.pack(fill="x", padx=20, pady=20)
 
@@ -252,13 +267,16 @@ class DashboardWindow:
         cat_list = ["All Categories"] + self.engine.get_incident_categories()
         self.filter_category_var = ctk.StringVar(value="All Categories")
         dropdown = ctk.CTkOptionMenu(top_ctrls, variable=self.filter_category_var, values=cat_list,
-                                     fg_color=self.primary, width=140, height=35, command=self.trigger_live_filter)
+                                     fg_color=self.primary, width=140, height=35,
+                                     command=lambda e: self.trigger_live_filter(reset_page=True))
         dropdown.pack(side="right", padx=(10, 0))
 
         self.search_entry = ctk.CTkEntry(top_ctrls, placeholder_text="e.g., Search Case ID, Name, or Zone...",
                                          width=280, height=35, border_color="#E0E0E0")
         self.search_entry.pack(side="right", padx=(10, 0))
-        self.search_entry.bind("<KeyRelease>", self.trigger_live_filter)
+
+        # ANTI-LAG FEATURE: Ginagamit ang delayed_search imbes na trigger agad!
+        self.search_entry.bind("<KeyRelease>", self.delayed_search)
 
         header_row = ctk.CTkFrame(container, fg_color="transparent")
         header_row.pack(fill="x", padx=20, pady=(10, 5))
@@ -279,13 +297,68 @@ class DashboardWindow:
         self.table_rows_frame = ctk.CTkFrame(container, fg_color="transparent")
         self.table_rows_frame.pack(fill="both", expand=True)
 
-        self.trigger_live_filter()
+        self.pagination_frame = ctk.CTkFrame(container, fg_color="transparent")
+        self.pagination_frame.pack(fill="x", padx=20, pady=(10, 15))
 
-    def trigger_live_filter(self, *args):
+        self.btn_prev = ctk.CTkButton(self.pagination_frame, text="< Previous", width=100, fg_color="#E0E0E0",
+                                      text_color=self.text_dark, hover_color="#D0D0D0", command=self.prev_page)
+        self.btn_prev.pack(side="left", padx=10)
+
+        self.lbl_page = ctk.CTkLabel(self.pagination_frame, text="Page 1 of 1", font=("Arial", 12, "bold"),
+                                     text_color=self.text_dark)
+        self.lbl_page.pack(side="left", expand=True)
+
+        self.btn_next = ctk.CTkButton(self.pagination_frame, text="Next >", width=100, fg_color="#E0E0E0",
+                                      text_color=self.text_dark, hover_color="#D0D0D0", command=self.next_page)
+        self.btn_next.pack(side="right", padx=10)
+
+        self.trigger_live_filter(reset_page=True)
+
+    def delayed_search(self, event):
+        # I-cancel ang luma kung nagta-type pa
+        if hasattr(self, 'search_timer') and self.search_timer:
+            self.window.after_cancel(self.search_timer)
+        # Maghintay ng 500ms bago mag-search
+        self.search_timer = self.window.after(500, lambda: self.trigger_live_filter(reset_page=True))
+
+    def trigger_live_filter(self, *args, reset_page=True):
+        if reset_page:
+            self.current_page = 1
+
         keyword = self.search_entry.get()
         category = self.filter_category_var.get()
-        filtered_data = self.engine.advanced_search_incidents(keyword, category)
-        self.draw_table_rows(filtered_data)
+        all_data = self.engine.advanced_search_incidents(keyword, category)
+
+        if not all_data:
+            self.draw_table_rows([])
+            self.lbl_page.configure(text="Page 0 of 0")
+            self.btn_prev.configure(state="disabled")
+            self.btn_next.configure(state="disabled")
+            return
+
+        total_items = len(all_data)
+        total_pages = math.ceil(total_items / self.items_per_page)
+
+        if self.current_page > total_pages: self.current_page = total_pages
+        if self.current_page < 1: self.current_page = 1
+
+        start_index = (self.current_page - 1) * self.items_per_page
+        end_index = start_index + self.items_per_page
+        cases_to_display = all_data[start_index:end_index]
+
+        self.draw_table_rows(cases_to_display)
+
+        self.lbl_page.configure(text=f"Page {self.current_page} of {total_pages}")
+        self.btn_prev.configure(state="normal" if self.current_page > 1 else "disabled")
+        self.btn_next.configure(state="normal" if self.current_page < total_pages else "disabled")
+
+    def next_page(self):
+        self.current_page += 1
+        self.trigger_live_filter(reset_page=False)
+
+    def prev_page(self):
+        self.current_page -= 1
+        self.trigger_live_filter(reset_page=False)
 
     def draw_table_rows(self, data_to_draw):
         for widget in self.table_rows_frame.winfo_children():
@@ -299,7 +372,6 @@ class DashboardWindow:
         for case in data_to_draw:
             status = case.get('status')
             color = self.green if status == 'Resolved' else (self.red if status == 'Urgent' else self.orange)
-
             cat = case.get('category', 'Uncategorized')
             zone = case.get('zone', 'N/A')
             type_txt = f"{cat} ({zone})"
@@ -311,7 +383,6 @@ class DashboardWindow:
         row.pack(fill="x", padx=20, pady=5)
         row.pack_propagate(False)
 
-        # THE FIX: Added e=None to all lambdas!
         row.bind("<Button-1>", lambda e=None, c=case: self.show_incident_details(c))
 
         id_lbl = ctk.CTkLabel(row, text=case.get('case_no'), font=("Arial", 12), text_color=self.primary, width=60,
@@ -347,7 +418,6 @@ class DashboardWindow:
     # ==========================================
     # POPUP: INCIDENT DETAILS & KAPITAN REQUEST
     # ==========================================
-    # ITO ANG FUNCTION NA NAWALA KAYA NAG-E-ERROR KA KANINA!
     def show_incident_details(self, row_data):
         popup = ctk.CTkToplevel(self.window)
         popup.title(f"Incident Details - Case #{row_data.get('case_no')}")
@@ -421,14 +491,11 @@ class DashboardWindow:
 
         if row_data.get('narrative_2'):
             if reopen_stat == 'Requested':
-                p2_title = "⏳ Phase 2: Re-open Request (Pending Approval)"
-                title_col = self.orange
+                p2_title, title_col = "⏳ Phase 2: Re-open Request (Pending)", self.orange
             elif reopen_stat == 'Denied':
-                p2_title = "❌ Phase 2: Re-open Request (Denied by Kapitan)"
-                title_col = self.red
+                p2_title, title_col = "❌ Phase 2: Request Denied", self.red
             else:
-                p2_title = "🔄 Phase 2: Case Re-opened"
-                title_col = self.green
+                p2_title, title_col = "🔄 Phase 2: Case Re-opened", self.green
 
             ctk.CTkLabel(scroll_area, text=p2_title, font=("Arial", 14, "bold"), text_color=title_col).pack(anchor="w",
                                                                                                             padx=20,
@@ -438,7 +505,7 @@ class DashboardWindow:
             n2_box = ctk.CTkTextbox(scroll_area, height=80, fg_color="#FFFFFF", text_color="#2B2B2B", border_width=1,
                                     border_color="#E0E0E0")
             n2_box.pack(fill="x", padx=20, pady=5)
-            n2_box.insert("1.0", f"STAFF REASON FOR RE-OPEN:\n{row_data.get('narrative_2')}")
+            n2_box.insert("1.0", f"STAFF REASON:\n{row_data.get('narrative_2')}")
             n2_box.configure(state="disabled")
 
             if row_data.get('settlement_details_2'):
@@ -499,7 +566,7 @@ class DashboardWindow:
                 messagebox.showinfo("Success", "Request sent to Kapitan's Dashboard!")
                 req_window.destroy()
                 parent_popup.destroy()
-                self.trigger_live_filter()
+                self.trigger_live_filter(reset_page=False)
             else:
                 messagebox.showerror("Error", "Failed to send request.")
 
@@ -530,7 +597,6 @@ class DashboardWindow:
             full_name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip()
             role = u.get('role', 'Staff')
             acc_status = u.get('status', 'Active')
-
             self.add_person(list_frame, full_name, role, acc_status)
 
     def add_person(self, parent, name, role, acc_status):
@@ -612,39 +678,53 @@ class DashboardWindow:
         if messagebox.askyesno("Confirm Logout", "Are you sure you want to log out of the Command Center?"):
             if hasattr(self, 'audit_id') and self.audit_id:
                 self.engine.log_user_logout(self.audit_id)
-
             self.window.destroy()
             if self.on_logout:
                 self.on_logout()
 
     def force_logout_on_close(self):
         if hasattr(self, 'audit_id') and self.audit_id:
-            print("System closed via X or Alt+F4. Saving exact logout time...")
             self.engine.log_user_logout(self.audit_id)
-
         self.window.destroy()
-
         if self.on_logout:
             self.on_logout()
 
     # ==========================================
-    # PAGE NAVIGATION
+    # PAGE NAVIGATION (ANTI-LAG CACHE)
     # ==========================================
     def show_blotter_page(self):
-        self.clear_main_frame()
+        self.hide_all_pages()
         self.set_active_tab("blotter")
-        IncidentBlotterPage(self.main_frame, self.engine, self.user)
+
+        if "blotter" not in self.page_cache:
+            container = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+            IncidentBlotterPage(container, self.engine, self.user)
+            self.page_cache["blotter"] = container
+
+        self.page_cache["blotter"].pack(fill="both", expand=True)
 
     def show_resolution_page(self):
-        self.clear_main_frame()
+        self.hide_all_pages()
         self.set_active_tab("resolution")
-        ResolutionPage(self.main_frame, self.engine, self.user)
+
+        if "resolution" not in self.page_cache:
+            container = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+            ResolutionPage(container, self.engine, self.user)
+            self.page_cache["resolution"] = container
+
+        self.page_cache["resolution"].pack(fill="both", expand=True)
 
     def show_analytics_page(self):
-        self.clear_main_frame()
+        self.hide_all_pages()
         self.set_active_tab("analytics")
-        ctk.CTkLabel(self.main_frame, text="📊 Analytics Page (Coming Soon)", font=("Arial", 24),
-                     text_color=self.text_muted).pack(pady=100)
+
+        if "analytics" not in self.page_cache:
+            container = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+            ctk.CTkLabel(container, text="📊 Analytics Page (Coming Soon)", font=("Arial", 24),
+                         text_color=self.text_muted).pack(pady=100)
+            self.page_cache["analytics"] = container
+
+        self.page_cache["analytics"].pack(fill="both", expand=True)
 
     # ==========================================
     # SMART KEYBOARD SHORTCUTS
@@ -653,11 +733,9 @@ class DashboardWindow:
         focused_widget = self.window.focus_get()
         if focused_widget:
             widget_type = type(focused_widget).__name__
-            if widget_type in ['CTkEntry', 'CTkTextbox', 'Entry', 'Text']:
-                return
+            if widget_type in ['CTkEntry', 'CTkTextbox', 'Entry', 'Text']: return
 
         key = event.char.lower()
-
         if key == '1':
             self.show_overview_page()
         elif key == '2':
@@ -665,7 +743,6 @@ class DashboardWindow:
         elif key == '3':
             self.show_resolution_page()
         elif key == 'k':
-            if hasattr(self, 'toggle_profile_panel'):
-                self.prompt_admin_access()
+            if hasattr(self, 'toggle_profile_panel'): self.prompt_admin_access()
         elif key == 'l':
             self.handle_logout()
