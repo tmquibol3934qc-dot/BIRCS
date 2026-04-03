@@ -36,7 +36,7 @@ class ForgotPasswordDialog:
         self.step1_frame = ctk.CTkFrame(self.window, fg_color="transparent")
         self.step1_frame.pack(fill="both", expand=True, padx=40)
 
-        ctk.CTkLabel(self.step1_frame, text="Enter your Employee ID or Username:", font=(self.ui_font, 12, "bold"),
+        ctk.CTkLabel(self.step1_frame, text="Enter your Employee ID:", font=(self.ui_font, 12, "bold"),
                      text_color="black").pack(anchor="w", pady=(10, 5))
         self.emp_id_entry = ctk.CTkEntry(self.step1_frame, height=40, font=(self.ui_font, 14), border_color="black",
                                          border_width=1, corner_radius=0)
@@ -140,15 +140,36 @@ class ForgotPasswordDialog:
         pwd1 = self.new_pass_entry.get()
         pwd2 = self.conf_pass_entry.get()
 
-        if len(pwd1) < 6:
-            messagebox.showwarning("Error", "Password must be at least 6 characters long.")
+        if len(pwd1) < 8:  # Ginawa ko na ring 8 para consistent sa signup mo!
+            messagebox.showwarning("Error", "Password must be at least 8 characters long.")
             return
 
         if pwd1 != pwd2:
             messagebox.showerror("Error", "Passwords do not match!")
             return
 
+        # 1. Subukan i-reset ang password sa DB
         if self.engine.reset_user_password(self.target_id, pwd1):
+
+            # ============================================================
+            # THE SECURITY LOG TRIGGER: Dito papasok yung alert ni Kapitan!
+            # ============================================================
+            try:
+                # Kukunin muna natin yung info ni user base sa ID na nilagay nya sa Step 1
+                user_info = self.engine.get_user_by_id(self.target_id)
+                u_id = user_info.get('id')
+                u_name = f"{user_info.get('first_name')} {user_info.get('last_name')}"
+
+                # Isulat na sa security_logs table!
+                self.engine.log_security_event(
+                    user_id=u_id,
+                    action="PASSWORD_RESET",
+                    details=f"ALERT: Staff {u_name} (ID: {self.target_id}) successfully reset their password via Security Questions."
+                )
+            except Exception as e:
+                print(f"Logging Error: {e}")  # Wag natin itigil yung flow kahit mag-error yung log
+            # ============================================================
+
             messagebox.showinfo("Success", "Your password has been successfully reset. You can now log in!")
             self.window.destroy()
         else:
