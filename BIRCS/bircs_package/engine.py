@@ -851,22 +851,54 @@ class DatabaseEngine:
     # ==========================================
     # SECURITY ALERTS LOGIC (TAGA-BASA AT TAGA-UPDATE)
     # ==========================================
+
     def get_security_logs(self):
-        """Kukunin lahat ng security alerts, pinakabago sa taas"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
 
-            # Kukunin natin lahat from security_logs table
+            # =========================================================
+            # THE BULLETPROOF JOIN QUERY
+            # =========================================================
+            query = """
+                SELECT 
+                    sl.log_id, 
+                    sl.user_id, 
+                    -- CONCAT_WS: Pinagsasama kahit may null. IFNULL: Pag wala talaga, 'Unknown' ang ilalagay.
+                    IFNULL(CONCAT_WS(' ', u.first_name, u.last_name), 'Unknown User') AS employee_name, 
+                    sl.action_type AS action, 
+                    sl.details, 
+                    sl.created_at AS timestamp, 
+                    sl.is_read 
+                FROM security_logs sl
+                -- ⚠️ BOSSING, CHECK MO 'TONG LINYA NA 'TO! ⚠️
+                -- Kung 'employee_id' o 'emp_id' ang tawag mo dun sa 231131 sa users table, palitan mo yung u.id!
+                LEFT JOIN users u ON sl.user_id = u.employee_id 
+                ORDER BY sl.created_at DESC
+            """
+
+            cursor.execute(query)
+            records = cursor.fetchall()
+            conn.close()
+            return records
+
+        except Exception as e:
+            print(f"Error fetching security logs: {e}")
+            return []
+
+    def get_security_alerts(self):  # (O kung anuman ang pangalan ng function mo)
+        try:
+            # THE FIX: Idagdag ang dictionary=True para pwede yung .get() sa frontend!
+            cursor = self.conn.cursor(dictionary=True)
+
+            # (Yung query mo na SELECT * FROM security_logs...)
             query = "SELECT * FROM security_logs ORDER BY created_at DESC"
             cursor.execute(query)
 
-            # Kung naka-dictionary cursor ka na sa __init__, ito na 'yun
-            logs = cursor.fetchall()
-            conn.close()
-            return logs
+            records = cursor.fetchall()
+            return records
         except Exception as e:
-            print(f"Error fetching security logs: {e}")
+            print(f"Error fetching alerts: {e}")
             return []
 
     def mark_security_log_read(self, log_id):
@@ -899,3 +931,19 @@ class DatabaseEngine:
         new_text = new_text.replace("Complainant", comp_name)
 
         return new_text
+
+    def mark_alert_as_read(self, log_id):
+        """Tinatawag 'to kapag kinlik ni Kapitan yung alert para mabasa"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            query = "UPDATE security_logs SET is_read = 1 WHERE log_id = %s"
+            cursor.execute(query, (log_id,))
+
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Failed to mark alert as read: {e}")
+            return False
