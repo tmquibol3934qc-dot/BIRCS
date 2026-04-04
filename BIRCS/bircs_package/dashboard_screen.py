@@ -15,8 +15,10 @@ class DashboardWindow:
 
         self.window = ctk.CTkToplevel()
         self.window.title("BICRS - Command Center Dashboard")
-        self.window.overrideredirect(True)
-        self.window.state('zoomed')
+
+        # THE FIX: Tinanggal ang overrideredirect(True) para lumabas sa Taskbar!
+        self.window.state('zoomed')  # Full screen pero safe
+
         self.window.protocol("WM_DELETE_WINDOW", self.force_logout_on_close)
         self.window.bind("<Key>", self.handle_shortcuts)
 
@@ -34,7 +36,19 @@ class DashboardWindow:
         # TIMER, AUDIT & CACHE INIT LOGIC
         # ==========================================
         self.login_time = datetime.now()
-        self.audit_id = self.user.get('audit_id')
+
+        user_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}".strip()
+
+        # THE FIX: Dito na tayo mag-ti-Time In!
+        # Titingnan muna natin kung may 'audit_id' na siya. Kung wala, gawa ng bago.
+        if not self.user.get('audit_id'):
+            self.audit_id = self.engine.log_user_login(user_name, self.user_role)
+            self.user['audit_id'] = self.audit_id  # I-save sa memory para pwedeng ipasa kay Kapitan!
+        else:
+            self.audit_id = self.user.get('audit_id')
+
+        # Dito itatago ni Python yung mga pages para mabilis lumipat!
+        self.page_cache = {}
 
         # THE FIX: Dito itatago ni Python yung mga pages para mabilis lumipat!
         self.page_cache = {}
