@@ -149,9 +149,7 @@ class LoginWindow:
             fname = user_data.get('first_name', '')
             lname = user_data.get('last_name', '')
 
-            full_name = f"{fname} {lname}".strip()
-            audit_id = self.engine.log_user_login(full_name, role)
-            user_data['audit_id'] = audit_id
+
 
             messagebox.showinfo("Login Success", f"Welcome back, {role.title()} {fname} {lname}!")
             self.root.withdraw()
