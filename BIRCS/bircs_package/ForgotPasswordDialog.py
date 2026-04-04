@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from tkinter import messagebox
+import re  # <--- IDAGDAG MO 'TO SA PINAKATAAS BOSSING!
 
 
 class ForgotPasswordDialog:
@@ -140,35 +141,43 @@ class ForgotPasswordDialog:
         pwd1 = self.new_pass_entry.get()
         pwd2 = self.conf_pass_entry.get()
 
-        if len(pwd1) < 8:  # Ginawa ko na ring 8 para consistent sa signup mo!
-            messagebox.showwarning("Error", "Password must be at least 8 characters long.")
+        # ============================================================
+        # 1. STRICT PASSWORD VALIDATION (Tulad ng sa Sign-up!)
+        # ============================================================
+        if len(pwd1) < 8:
+            messagebox.showwarning("Weak Password", "Password must be at least 8 characters long.")
+            return
+        if not re.search(r"[A-Z]", pwd1):
+            messagebox.showwarning("Weak Password", "Password must contain at least one uppercase letter.")
+            return
+        if not re.search(r"[0-9]", pwd1):
+            messagebox.showwarning("Weak Password", "Password must contain at least one number.")
+            return
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", pwd1):
+            messagebox.showwarning("Weak Password", "Password must contain at least one special character.")
             return
 
         if pwd1 != pwd2:
             messagebox.showerror("Error", "Passwords do not match!")
             return
 
-        # 1. Subukan i-reset ang password sa DB
+            # ============================================================
+            # 2. SAVE PASSWORD AND TRIGGER KAPITAN'S ALERT
+            # ============================================================
         if self.engine.reset_user_password(self.target_id, pwd1):
 
-            # ============================================================
-            # THE SECURITY LOG TRIGGER: Dito papasok yung alert ni Kapitan!
-            # ============================================================
+            # THE ULTIMATE FIX: Diretso pasa na ng target_id!
+            # Walang nang get_user_by_id para iwas error.
             try:
-                # Kukunin muna natin yung info ni user base sa ID na nilagay nya sa Step 1
-                user_info = self.engine.get_user_by_id(self.target_id)
-                u_id = user_info.get('id')
-                u_name = f"{user_info.get('first_name')} {user_info.get('last_name')}"
-
-                # Isulat na sa security_logs table!
                 self.engine.log_security_event(
-                    user_id=u_id,
-                    action="PASSWORD_RESET",
-                    details=f"ALERT: Staff {u_name} (ID: {self.target_id}) successfully reset their password via Security Questions."
+                    user_id=self.target_id,  # <-- Ipapasa na natin agad yung ID niya!
+                    action="PASSWORD RESET",
+                    details=f"ALERT: User with ID '{self.target_id}' successfully reset their password via Security Questions."
                 )
             except Exception as e:
-                print(f"Logging Error: {e}")  # Wag natin itigil yung flow kahit mag-error yung log
-            # ============================================================
+                # Kung sakaling naghihigpit ang DB mo at kailangan ng NUMBER (int) sa user_id,
+                # mag-e-error 'to at makikita natin agad.
+                messagebox.showerror("Logging Error", f"Password changed, but failed to alert Kapitan:\n{e}")
 
             messagebox.showinfo("Success", "Your password has been successfully reset. You can now log in!")
             self.window.destroy()
