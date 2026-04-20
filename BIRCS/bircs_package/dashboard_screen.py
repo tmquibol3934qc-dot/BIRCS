@@ -16,21 +16,23 @@ class DashboardWindow:
         self.window = ctk.CTkToplevel()
         self.window.title("BICRS - Command Center Dashboard")
 
-        # THE FIX: Tinanggal ang overrideredirect(True) para lumabas sa Taskbar!
         self.window.state('zoomed')  # Full screen pero safe
 
         self.window.protocol("WM_DELETE_WINDOW", self.force_logout_on_close)
         self.window.bind("<Key>", self.handle_shortcuts)
 
-        # Colors
-        self.bg_color = "#F4F7F6"
-        self.sidebar_color = "#FFFFFF"
-        self.text_dark = "#2B2B2B"
-        self.text_muted = "#7A7A7A"
-        self.primary = "#E79124"
-        self.orange = "#F2994A"
-        self.green = "#27AE60"
-        self.red = "#EB5757"
+        # ==========================================
+        # 🎨 NEW COLOR PALETTE (From the Mockup)
+        # ==========================================
+        self.bg_color = "#F8F9F5"  # Off-white/Cream background
+        self.sidebar_color = "#1D2153"  # Dark Navy Blue Sidebar
+        self.text_dark = "#2B2B2B"  # Dark text for main content
+        self.text_muted = "#7A7A7A"  # Gray text
+        self.primary = "#2980B9"  # Blue highlights
+        self.orange = "#F39C12"  # Pending / Warning
+        self.green = "#27AE60"  # Resolved / Success
+        self.red = "#E74C3C"  # Urgent / Danger
+        self.table_header = "#A3AEB5"  # Gray table header
 
         # ==========================================
         # TIMER, AUDIT & CACHE INIT LOGIC
@@ -39,18 +41,12 @@ class DashboardWindow:
 
         user_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}".strip()
 
-        # THE FIX: Dito na tayo mag-ti-Time In!
-        # Titingnan muna natin kung may 'audit_id' na siya. Kung wala, gawa ng bago.
         if not self.user.get('audit_id'):
             self.audit_id = self.engine.log_user_login(user_name, self.user_role)
-            self.user['audit_id'] = self.audit_id  # I-save sa memory para pwedeng ipasa kay Kapitan!
+            self.user['audit_id'] = self.audit_id
         else:
             self.audit_id = self.user.get('audit_id')
 
-        # Dito itatago ni Python yung mga pages para mabilis lumipat!
-        self.page_cache = {}
-
-        # THE FIX: Dito itatago ni Python yung mga pages para mabilis lumipat!
         self.page_cache = {}
 
         self.window.grid_columnconfigure(1, weight=1)
@@ -68,7 +64,7 @@ class DashboardWindow:
         self.show_overview_page()
 
     # ==========================================
-    # SIDEBAR SETUP
+    # SIDEBAR SETUP (Dark Blue Theme)
     # ==========================================
     def create_sidebar(self):
         sidebar = ctk.CTkFrame(self.window, width=220, corner_radius=0, fg_color=self.sidebar_color)
@@ -77,13 +73,14 @@ class DashboardWindow:
 
         logo_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
         logo_frame.pack(pady=(30, 20), padx=20, fill="x")
-        ctk.CTkLabel(logo_frame, text="BICRS", font=("Arial", 28, "bold"), text_color=self.primary).pack(
-            anchor="center")
-        ctk.CTkLabel(logo_frame, text="Brgy. 176-B Bagong Silang", font=("Arial", 11), text_color=self.text_muted).pack(
+
+        # Logo text adjusted for dark background
+        ctk.CTkLabel(logo_frame, text="BICRS", font=("Arial", 28, "bold"), text_color="#F1C40F").pack(anchor="center")
+        ctk.CTkLabel(logo_frame, text="Brgy. 176-B Bagong Silang", font=("Arial", 11), text_color="#BDC3C7").pack(
             anchor="center")
 
         user_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}"
-        ctk.CTkLabel(sidebar, text=f"Welcome, {user_name}", font=("Arial", 12, "bold"), text_color=self.text_dark).pack(
+        ctk.CTkLabel(sidebar, text=f"Welcome, {user_name}", font=("Arial", 12, "bold"), text_color="white").pack(
             pady=(0, 5))
         ctk.CTkLabel(sidebar, text=self.user_role.upper(), font=("Arial", 10), text_color=self.green).pack(pady=(0, 20))
 
@@ -95,18 +92,20 @@ class DashboardWindow:
         ctk.CTkFrame(sidebar, height=150, fg_color="transparent").pack()
 
     def create_nav_btn(self, parent, text, command=None):
-        btn = ctk.CTkButton(parent, text=f"  {text}", fg_color="transparent", text_color=self.text_muted,
-                            hover_color="#F0F0F0", anchor="w", height=45, corner_radius=8, font=("Arial", 13, "bold"),
+        # White text for dark sidebar
+        btn = ctk.CTkButton(parent, text=f"  {text}", fg_color="transparent", text_color="white",
+                            hover_color="#2C3E50", anchor="w", height=45, corner_radius=0, font=("Arial", 13, "bold"),
                             command=command)
-        btn.pack(fill="x", padx=15, pady=5)
+        btn.pack(fill="x", pady=2)
         return btn
 
     def set_active_tab(self, active_key):
         for key, btn in self.nav_buttons.items():
             if key == active_key:
-                btn.configure(fg_color=self.primary, text_color="white", hover_color=self.primary)
+                # Active tab gets white background and dark blue text
+                btn.configure(fg_color="white", text_color=self.sidebar_color, hover_color="white")
             else:
-                btn.configure(fg_color="transparent", text_color=self.text_muted, hover_color="#F0F0F0")
+                btn.configure(fg_color="transparent", text_color="white", hover_color="#2C3E50")
 
         if hasattr(self, 'profile_btn'):
             if active_key == "dashboard":
@@ -118,7 +117,6 @@ class DashboardWindow:
                     self.panel_visible = False
 
     def hide_all_pages(self):
-        # Imbes na destroy(), itatago lang natin para mabilis lumipat ng tabs!
         for widget in self.main_frame.winfo_children():
             widget.pack_forget()
             widget.grid_forget()
@@ -129,8 +127,8 @@ class DashboardWindow:
     def create_profile_panel(self):
         self.profile_btn = ctk.CTkButton(
             self.window, text="👤", width=45, height=45, corner_radius=22,
-            fg_color="transparent", text_color=self.primary,
-            hover_color="#E0E0E0", font=("Arial", 24),
+            fg_color="white", text_color=self.sidebar_color, border_width=1, border_color="#E0E0E0",
+            hover_color="#F0F0F0", font=("Arial", 24),
             command=self.toggle_profile_panel
         )
         self.profile_btn.place(relx=0.98, rely=0.02, anchor="ne")
@@ -139,7 +137,7 @@ class DashboardWindow:
                                           border_color="#E0E0E0")
         self.panel_visible = False
 
-        header_frame = ctk.CTkFrame(self.account_panel, fg_color=self.primary, corner_radius=10)
+        header_frame = ctk.CTkFrame(self.account_panel, fg_color=self.sidebar_color, corner_radius=10)
         header_frame.pack(fill="x")
         header_frame.configure(corner_radius=0)
         ctk.CTkLabel(header_frame, text="Account Information", font=("Arial", 14, "bold"), text_color="white").pack(
@@ -216,7 +214,6 @@ class DashboardWindow:
         self.hide_all_pages()
         self.set_active_tab("dashboard")
 
-        # Lagi nating ide-destroy ang lumang dashboard cache para mag-update yung "Total Cases" Count!
         if "dashboard" in self.page_cache:
             self.page_cache["dashboard"].destroy()
 
@@ -227,15 +224,16 @@ class DashboardWindow:
         db_stats = self.engine.get_dashboard_stats()
         db_analytics = self.engine.get_incident_analytics()
 
-        header_frame = ctk.CTkFrame(dashboard_container, fg_color="transparent")
+        # Clean Header Box
+        header_frame = ctk.CTkFrame(dashboard_container, fg_color="white", corner_radius=8)
         header_frame.pack(fill="x", padx=30, pady=(30, 15))
-        ctk.CTkLabel(header_frame, text="Command Center Dashboard", font=("Arial", 24, "bold"),
-                     text_color=self.text_dark).pack(side="left")
+        ctk.CTkLabel(header_frame, text="Dashboard", font=("Arial", 28, "bold"), text_color=self.sidebar_color).pack(
+            side="left", padx=20, pady=15)
 
         stats_frame = ctk.CTkFrame(dashboard_container, fg_color="transparent")
         stats_frame.pack(fill="x", padx=25)
 
-        self.create_stat_card(stats_frame, "Total Cases", str(db_stats['Total Cases']), self.primary)
+        self.create_stat_card(stats_frame, "Total Cases", str(db_stats['Total Cases']), self.red)
         self.create_stat_card(stats_frame, "Normal", str(db_stats['Pending']), self.orange)
         self.create_stat_card(stats_frame, "Resolved", str(db_stats['Resolved']), self.green)
         self.create_stat_card(stats_frame, "Urgent", str(db_stats['Urgent']), self.red)
@@ -257,82 +255,89 @@ class DashboardWindow:
         self.build_incident_analytics(right_panel, db_analytics)
 
     def create_stat_card(self, parent, title, value, border_color):
-        card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10, height=110)
+        # Applied white BG and colored outline like the mockup
+        card = ctk.CTkFrame(parent, fg_color="white", border_color=border_color, border_width=1, corner_radius=8,
+                            height=100)
         card.pack(side="left", fill="x", expand=True, padx=5)
         card.pack_propagate(False)
-        top_line = ctk.CTkFrame(card, height=4, fg_color=border_color, corner_radius=0)
-        top_line.pack(fill="x", padx=20, pady=(15, 0))
-        ctk.CTkLabel(card, text=value, font=("Arial", 32, "bold"), text_color=self.text_dark).pack(pady=(10, 0))
-        ctk.CTkLabel(card, text=title, font=("Arial", 12), text_color=self.text_muted).pack()
 
-    # ==========================================
-    # TABLE, PAGINATION & DEBOUNCED SEARCH
-    # ==========================================
+        # Centering content
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.place(relx=0.5, rely=0.5, anchor="center")
+
+        ctk.CTkLabel(content, text=title, font=("Arial", 14, "bold"), text_color=border_color).pack(pady=(0, 5))
+        ctk.CTkLabel(content, text=value, font=("Arial", 28, "bold"), text_color=border_color).pack()
+
+
     def build_table(self, container):
-        self.current_page = 1
-        self.items_per_page = 10  # Rows per page
+            self.current_page = 1
+            self.items_per_page = 10
 
-        top_ctrls = ctk.CTkFrame(container, fg_color="transparent")
-        top_ctrls.pack(fill="x", padx=20, pady=20)
+            top_ctrls = ctk.CTkFrame(container, fg_color="white", corner_radius=10)
+            top_ctrls.pack(fill="x", padx=20, pady=15)
 
-        ctk.CTkLabel(top_ctrls, text="Recent Blotter Entries", font=("Arial", 16, "bold"),
-                     text_color=self.text_dark).pack(side="left")
+            ctk.CTkLabel(top_ctrls, text="Filter Cases", font=("Arial", 14, "bold"), text_color=self.text_dark).pack(
+                side="left")
 
-        cat_list = ["All Categories"] + self.engine.get_incident_categories()
-        self.filter_category_var = ctk.StringVar(value="All Categories")
-        dropdown = ctk.CTkOptionMenu(top_ctrls, variable=self.filter_category_var, values=cat_list,
-                                     fg_color=self.primary, width=140, height=35,
-                                     command=lambda e: self.trigger_live_filter(reset_page=True))
-        dropdown.pack(side="right", padx=(10, 0))
+            cat_list = ["All Categories"] + self.engine.get_incident_categories()
+            self.filter_category_var = ctk.StringVar(value="All Categories")
 
-        self.search_entry = ctk.CTkEntry(top_ctrls, placeholder_text="e.g., Search Case ID, Name, or Zone...",
-                                         width=280, height=35, border_color="#E0E0E0")
-        self.search_entry.pack(side="right", padx=(10, 0))
+            # THE FIX: Tinanggal ang border_color at border_width dito para hindi mag-iyak si CustomTkinter!
+            dropdown = ctk.CTkOptionMenu(top_ctrls, variable=self.filter_category_var, values=cat_list,
+                                         fg_color="white", text_color=self.text_dark, button_color="#F0F0F0",
+                                         button_hover_color="#E0E0E0", width=140, height=35,
+                                         command=lambda e: self.trigger_live_filter(reset_page=True))
+            dropdown.pack(side="left", padx=(15, 0))
 
-        # ANTI-LAG FEATURE: Ginagamit ang delayed_search imbes na trigger agad!
-        self.search_entry.bind("<KeyRelease>", self.delayed_search)
+            # Sa CTkEntry pwede ang border_color kaya safe 'to
+            self.search_entry = ctk.CTkEntry(top_ctrls, placeholder_text="e.g., Search Case ID, Name, or Zone...",
+                                             width=280, height=35, border_color="#CCCCCC", text_color=self.text_dark)
+            self.search_entry.pack(side="right", padx=(10, 0))
+            self.search_entry.bind("<KeyRelease>", self.delayed_search)
 
-        header_row = ctk.CTkFrame(container, fg_color="transparent")
-        header_row.pack(fill="x", padx=20, pady=(10, 5))
+            # GRAY TABLE HEADER
+            title_row = ctk.CTkFrame(container, fg_color=self.table_header, corner_radius=0, height=45)
+            title_row.pack(fill="x")
+            title_row.pack_propagate(False)
+            ctk.CTkLabel(title_row, text="Recent Blotter Entries", font=("Arial", 16, "bold"), text_color="white").pack(
+                side="left", padx=20)
 
-        ctk.CTkLabel(header_row, text="ID", font=("Arial", 12, "bold"), text_color=self.text_muted, width=60,
-                     anchor="w").pack(side="left")
-        ctk.CTkLabel(header_row, text="Category & Zone", font=("Arial", 12, "bold"), text_color=self.text_muted,
-                     width=180, anchor="w").pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(header_row, text="Processed By", font=("Arial", 12, "bold"), text_color=self.primary, width=120,
-                     anchor="w").pack(side="left")
-        ctk.CTkLabel(header_row, text="Time", font=("Arial", 12, "bold"), text_color=self.text_muted, width=100,
-                     anchor="w").pack(side="left")
-        ctk.CTkLabel(header_row, text="Status", font=("Arial", 12, "bold"), text_color=self.text_muted, width=80,
-                     anchor="e").pack(side="right", padx=10)
+            header_row = ctk.CTkFrame(container, fg_color="#F4F4F4", corner_radius=0)
+            header_row.pack(fill="x")
 
-        ctk.CTkFrame(container, height=1, fg_color="#E0E0E0").pack(fill="x", padx=20, pady=5)
+            # YOUR ORIGINAL COLUMNS
+            ctk.CTkLabel(header_row, text="ID", font=("Arial", 12, "bold"), text_color=self.text_dark, width=60,
+                         anchor="w").pack(side="left", padx=(20, 0), pady=10)
+            ctk.CTkLabel(header_row, text="Category & Zone", font=("Arial", 12, "bold"), text_color=self.text_dark,
+                         width=180, anchor="w").pack(side="left", padx=(0, 10))
+            ctk.CTkLabel(header_row, text="Processed By", font=("Arial", 12, "bold"), text_color=self.text_dark,
+                         width=120, anchor="w").pack(side="left")
+            ctk.CTkLabel(header_row, text="Time", font=("Arial", 12, "bold"), text_color=self.text_dark, width=100,
+                         anchor="w").pack(side="left")
+            ctk.CTkLabel(header_row, text="Status", font=("Arial", 12, "bold"), text_color=self.text_dark, width=80,
+                         anchor="e").pack(side="right", padx=20)
 
-        self.table_rows_frame = ctk.CTkFrame(container, fg_color="transparent")
-        self.table_rows_frame.pack(fill="both", expand=True)
+            self.table_rows_frame = ctk.CTkFrame(container, fg_color="white")
+            self.table_rows_frame.pack(fill="both", expand=True)
 
-        self.pagination_frame = ctk.CTkFrame(container, fg_color="transparent")
-        self.pagination_frame.pack(fill="x", padx=20, pady=(10, 15))
+            self.pagination_frame = ctk.CTkFrame(container, fg_color="white")
+            self.pagination_frame.pack(fill="x", padx=20, pady=(10, 15))
 
-        self.btn_prev = ctk.CTkButton(self.pagination_frame, text="< Previous", width=100, fg_color="#E0E0E0",
-                                      text_color=self.text_dark, hover_color="#D0D0D0", command=self.prev_page)
-        self.btn_prev.pack(side="left", padx=10)
+            self.btn_prev = ctk.CTkButton(self.pagination_frame, text="< Previous", width=100, fg_color="#F0F0F0",
+                                          text_color=self.text_dark, hover_color="#E0E0E0", command=self.prev_page)
+            self.btn_prev.pack(side="left", padx=10)
+            self.lbl_page = ctk.CTkLabel(self.pagination_frame, text="Page 1 of 1", font=("Arial", 12, "bold"),
+                                         text_color=self.text_dark)
+            self.lbl_page.pack(side="left", expand=True)
+            self.btn_next = ctk.CTkButton(self.pagination_frame, text="Next >", width=100, fg_color="#F0F0F0",
+                                          text_color=self.text_dark, hover_color="#E0E0E0", command=self.next_page)
+            self.btn_next.pack(side="right", padx=10)
 
-        self.lbl_page = ctk.CTkLabel(self.pagination_frame, text="Page 1 of 1", font=("Arial", 12, "bold"),
-                                     text_color=self.text_dark)
-        self.lbl_page.pack(side="left", expand=True)
-
-        self.btn_next = ctk.CTkButton(self.pagination_frame, text="Next >", width=100, fg_color="#E0E0E0",
-                                      text_color=self.text_dark, hover_color="#D0D0D0", command=self.next_page)
-        self.btn_next.pack(side="right", padx=10)
-
-        self.trigger_live_filter(reset_page=True)
+            self.trigger_live_filter(reset_page=True)
 
     def delayed_search(self, event):
-        # I-cancel ang luma kung nagta-type pa
         if hasattr(self, 'search_timer') and self.search_timer:
             self.window.after_cancel(self.search_timer)
-        # Maghintay ng 500ms bago mag-search
         self.search_timer = self.window.after(500, lambda: self.trigger_live_filter(reset_page=True))
 
     def trigger_live_filter(self, *args, reset_page=True):
@@ -393,18 +398,18 @@ class DashboardWindow:
             self.add_table_row(self.table_rows_frame, case, type_txt, color)
 
     def add_table_row(self, parent, case, type_txt, color):
-        row = ctk.CTkFrame(parent, fg_color="transparent", height=40, cursor="hand2")
-        row.pack(fill="x", padx=20, pady=5)
+        row = ctk.CTkFrame(parent, fg_color="white", height=45, cursor="hand2")
+        row.pack(fill="x")
         row.pack_propagate(False)
 
         row.bind("<Button-1>", lambda e=None, c=case: self.show_incident_details(c))
 
-        id_lbl = ctk.CTkLabel(row, text=case.get('case_no'), font=("Arial", 12), text_color=self.primary, width=60,
-                              anchor="w", cursor="hand2")
-        id_lbl.pack(side="left")
+        id_lbl = ctk.CTkLabel(row, text=case.get('case_no'), font=("Arial", 12, "bold"), text_color=self.text_dark,
+                              width=60, anchor="w", cursor="hand2")
+        id_lbl.pack(side="left", padx=(20, 0))
         id_lbl.bind("<Button-1>", lambda e=None, c=case: self.show_incident_details(c))
 
-        type_lbl = ctk.CTkLabel(row, text=type_txt, font=("Arial", 12, "bold"), text_color=self.text_dark, width=180,
+        type_lbl = ctk.CTkLabel(row, text=type_txt, font=("Arial", 12), text_color=self.text_dark, width=180,
                                 anchor="w", cursor="hand2")
         type_lbl.pack(side="left", padx=(0, 10))
         type_lbl.bind("<Button-1>", lambda e=None, c=case: self.show_incident_details(c))
@@ -420,14 +425,14 @@ class DashboardWindow:
         time_lbl.bind("<Button-1>", lambda e=None, c=case: self.show_incident_details(c))
 
         raw_status = case.get('status')
-        display_status = "Normal" if raw_status == "Pending" else raw_status
+        display_status = "Pending" if raw_status == "Pending" else raw_status
 
-        pill = ctk.CTkLabel(row, text=display_status, fg_color=color, text_color="white", width=80, height=24,
-                            corner_radius=12, font=("Arial", 11, "bold"), cursor="hand2")
-        pill.pack(side="right", padx=10)
+        pill = ctk.CTkLabel(row, text=display_status, text_color=color, font=("Arial", 12, "bold"), width=80,
+                            anchor="e", cursor="hand2")
+        pill.pack(side="right", padx=20)
         pill.bind("<Button-1>", lambda e=None, c=case: self.show_incident_details(c))
 
-        ctk.CTkFrame(parent, height=1, fg_color="#F0F0F0").pack(fill="x", padx=20)
+        ctk.CTkFrame(parent, height=1, fg_color="#F0F0F0").pack(fill="x")
 
     # ==========================================
     # POPUP: INCIDENT DETAILS & KAPITAN REQUEST
@@ -443,22 +448,31 @@ class DashboardWindow:
         scroll_area.pack(fill="both", expand=True, padx=10, pady=10)
 
         ctk.CTkLabel(scroll_area, text=f"Case #{row_data.get('case_no')} Comprehensive Report",
-                     font=("Arial", 22, "bold"), text_color=self.primary).pack(pady=(10, 15))
+                     font=("Arial", 22, "bold"), text_color=self.sidebar_color).pack(pady=(10, 15))
 
-        info_frame = ctk.CTkFrame(scroll_area, fg_color="#FFFFFF", corner_radius=8)
+        info_frame = ctk.CTkFrame(scroll_area, fg_color="#FFFFFF", border_color="#E0E0E0", border_width=1,
+                                  corner_radius=8)
         info_frame.pack(fill="x", padx=20, pady=(5, 15))
 
-        ctk.CTkLabel(info_frame, text="Category:", font=("Arial", 12, "bold")).grid(row=0, column=0, sticky="w",
-                                                                                    padx=15, pady=(10, 5))
-        ctk.CTkLabel(info_frame, text=row_data.get('category', 'Uncategorized'), text_color=self.orange,
+        ctk.CTkLabel(info_frame, text="Category:", font=("Arial", 12, "bold"), text_color=self.text_dark).grid(row=0,
+                                                                                                               column=0,
+                                                                                                               sticky="w",
+                                                                                                               padx=15,
+                                                                                                               pady=(10,
+                                                                                                                     5))
+        ctk.CTkLabel(info_frame, text=row_data.get('category', 'Uncategorized'), text_color=self.primary,
                      font=("Arial", 12, "bold")).grid(row=0, column=1, sticky="w", padx=10, pady=(10, 5))
 
         status = row_data.get('status') or 'N/A'
         display_status = "Normal" if status == "Pending" else status
         status_color = self.red if status == 'Urgent' else (self.green if status == 'Resolved' else self.orange)
 
-        ctk.CTkLabel(info_frame, text="Status:", font=("Arial", 12, "bold")).grid(row=0, column=2, sticky="w", padx=15,
-                                                                                  pady=(10, 5))
+        ctk.CTkLabel(info_frame, text="Status:", font=("Arial", 12, "bold"), text_color=self.text_dark).grid(row=0,
+                                                                                                             column=2,
+                                                                                                             sticky="w",
+                                                                                                             padx=15,
+                                                                                                             pady=(10,
+                                                                                                                   5))
         ctk.CTkLabel(info_frame, text=display_status, text_color=status_color, font=("Arial", 12, "bold")).grid(row=0,
                                                                                                                 column=3,
                                                                                                                 sticky="w",
@@ -542,12 +556,14 @@ class DashboardWindow:
             elif reopen_stat == 'Denied':
                 ctk.CTkLabel(btn_frame, text="❌ Request Denied", text_color=self.red, font=("Arial", 12, "bold")).pack(
                     side="left", padx=10)
-                ctk.CTkButton(btn_frame, text="Submit New Request", fg_color=self.orange, hover_color="#C67B1D",
+                ctk.CTkButton(btn_frame, text="Submit New Request", fg_color="white", border_width=1,
+                              border_color=self.orange, text_color=self.orange, hover_color="#FFF3E0",
                               font=("Arial", 12, "bold"),
                               command=lambda: self.prompt_reopen_request(row_data.get('case_no'), popup)).pack(
                     side="left", padx=10)
             else:
-                ctk.CTkButton(btn_frame, text="Request Re-open", fg_color=self.orange, hover_color="#C67B1D",
+                ctk.CTkButton(btn_frame, text="Request Re-open", fg_color="white", border_width=1,
+                              border_color=self.orange, text_color=self.orange, hover_color="#FFF3E0",
                               font=("Arial", 12, "bold"),
                               command=lambda: self.prompt_reopen_request(row_data.get('case_no'), popup)).pack(
                     side="left", padx=10)
@@ -565,8 +581,7 @@ class DashboardWindow:
 
         ctk.CTkLabel(req_window, text="Reason for Re-opening (Sent to Kapitan)", font=("Arial", 14, "bold"),
                      text_color=self.primary).pack(pady=(20, 10))
-
-        reason_box = ctk.CTkTextbox(req_window, height=150, fg_color="#F9F9F9", text_color="black", border_width=1,
+        reason_box = ctk.CTkTextbox(req_window, height=150, fg_color="#FFFFFF", text_color="black", border_width=1,
                                     border_color="#E0E0E0")
         reason_box.pack(fill="x", padx=20, pady=(0, 20))
 
@@ -575,7 +590,6 @@ class DashboardWindow:
             if not reason:
                 messagebox.showwarning("Missing Info", "Please enter a reason to send to the Kapitan.")
                 return
-
             if self.engine.request_case_reopen(case_no, reason):
                 messagebox.showinfo("Success", "Request sent to Kapitan's Dashboard!")
                 req_window.destroy()
@@ -584,17 +598,17 @@ class DashboardWindow:
             else:
                 messagebox.showerror("Error", "Failed to send request.")
 
-        ctk.CTkButton(req_window, text="Send Request to Kapitan", fg_color=self.orange, hover_color="#C67B1D",
+        ctk.CTkButton(req_window, text="Send Request to Kapitan", fg_color=self.primary, hover_color="#1F618D",
                       font=("Arial", 12, "bold"), command=submit_request).pack(pady=10)
 
     # ==========================================
     # RIGHT SIDE PANEL (Personnel & Analytics)
     # ==========================================
     def build_active_personnel(self, parent):
-        card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10)
+        card = ctk.CTkFrame(parent, fg_color="white", border_color="#E0E0E0", border_width=1, corner_radius=8)
         card.pack(fill="x", pady=(0, 20))
 
-        ctk.CTkLabel(card, text="Team Roster & Status", font=("Arial", 14, "bold"), text_color=self.text_dark).pack(
+        ctk.CTkLabel(card, text="Team Roster & Status", font=("Arial", 14, "bold"), text_color=self.sidebar_color).pack(
             anchor="w", padx=20, pady=(20, 10))
 
         list_frame = ctk.CTkScrollableFrame(card, fg_color="transparent", height=150)
@@ -638,10 +652,10 @@ class DashboardWindow:
                                                                                                        pady=0)
 
     def build_incident_analytics(self, parent, analytics_data):
-        card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10)
+        card = ctk.CTkFrame(parent, fg_color="white", border_color="#E0E0E0", border_width=1, corner_radius=8)
         card.pack(fill="x")
 
-        ctk.CTkLabel(card, text="Incident Analytics", font=("Arial", 14, "bold"), text_color=self.text_dark).pack(
+        ctk.CTkLabel(card, text="Incident Analytics", font=("Arial", 14, "bold"), text_color=self.sidebar_color).pack(
             anchor="w", padx=20, pady=(20, 10))
 
         hotspot = analytics_data.get("hotspot", "N/A")
