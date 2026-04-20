@@ -1,6 +1,8 @@
 import mysql.connector
 from tkinter import messagebox
 from datetime import datetime, timedelta
+import re
+import difflib
 
 
 class DatabaseEngine:
@@ -8,12 +10,11 @@ class DatabaseEngine:
         # Database Configuration
         self.db_config = {
             'host': 'localhost',
-            'user': 'root',  # Default MySQL user
+            'user': 'root',
             'password': '',  # <--- CHANGE THIS TO YOUR MYSQL PASSWORD
             'database': 'bircs_db'
         }
 
-        # Test connection on startup
         # Test connection on startup
         try:
             conn = self.get_connection()
@@ -27,67 +28,50 @@ class DatabaseEngine:
         """Creates a new connection to the MySQL database"""
         return mysql.connector.connect(**self.db_config)
 
-    # --- REGISTRATION ---
+    # ==========================================
+    # 🧑‍🤝‍🧑 USER MANAGEMENT & AUTHENTICATION
+    # ==========================================
     def register_user(self, data):
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
 
-            # 1. Update SQL to include 'role' column
             sql = """
                   INSERT INTO users
                   (employee_id, rfid_code, first_name, last_name, role, contact_no, password, q1, a1, q2, a2, q3, a3)
-                  VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) \
+                  VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                   """
 
             parts = data['name'].split()
             fname = parts[0]
             lname = " ".join(parts[1:]) if len(parts) > 1 else ""
 
-            # 2. Add data['position'] to the values list (matching the order above)
             values = (
-                data['emp_id'],
-                data['rfid'],
-                fname,
-                lname,
-                data['position'],  # <--- This inserts the Title into the 'role' column
-                "N/A",
-                data['pass'],
-                data['q1'], data['a1'],
-                data['q2'], data['a2'],
-                data['q3'], data['a3']
+                data['emp_id'], data['rfid'], fname, lname, data['position'],
+                "N/A", data['pass'], data['q1'], data['a1'], data['q2'], data['a2'], data['q3'], data['a3']
             )
 
             cursor.execute(sql, values)
             conn.commit()
-
-            cursor.close()
             conn.close()
             return True, "Registration Successful!"
 
         except mysql.connector.IntegrityError as e:
-            if "rfid_code" in str(e):
-                return False, "This RFID Card is already registered!"
+            if "rfid_code" in str(e): return False, "This RFID Card is already registered!"
             return False, "Employee ID already exists."
         except Exception as e:
             return False, f"Database Error: {e}"
 
-    # --- LOGIN (With RFID Support!) ---\
     def authenticate_user(self, login_val, password=""):
-        """Verifies credentials (Username OR Employee ID) OR RFID, and enforces suspensions"""
+        """Verifies credentials OR RFID, enforces suspensions"""
         try:
-            from datetime import datetime
             conn = self.get_connection()
             cursor = conn.cursor(dictionary=True)
 
-            # --- 1. LOGIN TYPE CHECK (RFID vs Manual) ---
-            if not password:
-                # No password means it was an RFID scan!
+            if not password:  # RFID Login
                 query = "SELECT * FROM users WHERE rfid_code = %s OR employee_id = %s"
                 cursor.execute(query, (login_val, login_val))
-            else:
-                # Normal manual login!
-                # THE FIX: Now it checks if the text you typed matches EITHER the username OR the employee_id!
+            else:  # Manual Login
                 query = "SELECT * FROM users WHERE (username = %s OR employee_id = %s) AND password = %s"
                 cursor.execute(query, (login_val, login_val, password))
 
@@ -97,28 +81,24 @@ class DatabaseEngine:
                 conn.close()
                 return {"success": False, "message": "Invalid Credentials or Unregistered RFID."}
 
-            # --- 2. SECURITY & SUSPENSION CHECK ---
             status = user.get('status', 'Active')
 
             if status == 'Blocked':
                 conn.close()
-                return {"success": False,
-                        "message": "ACCESS DENIED: This account has been permanently blocked by the Kapitan."}
+                return {"success": False, "message": "ACCESS DENIED: Account permanently blocked."}
 
             if status == 'Suspended':
                 suspend_until = user.get('suspension_until')
-
-                if suspend_until:
-                    if datetime.now() < suspend_until:
-                        formatted_time = suspend_until.strftime("%B %d, %Y at %I:%M %p")
-                        conn.close()
-                        return {"success": False,
-                                "message": f"ACCOUNT SUSPENDED.\n\nYou cannot log in until:\n{formatted_time}"}
-                    else:
-                        cursor.execute("UPDATE users SET status = 'Active', suspension_until = NULL WHERE id = %s",
-                                       (user['id'],))
-                        conn.commit()
-                        user['status'] = 'Active'
+                if suspend_until and datetime.now() < suspend_until:
+                    formatted_time = suspend_until.strftime("%B %d, %Y at %I:%M %p")
+                    conn.close()
+                    return {"success": False, "message": f"ACCOUNT SUSPENDED until:\n{formatted_time}"}
+                elif suspend_until:
+                    # Lift suspension if time has passed
+                    cursor.execute("UPDATE users SET status = 'Active', suspension_until = NULL WHERE id = %s",
+                                   (user['id'],))
+                    conn.commit()
+                    user['status'] = 'Active'
 
             conn.close()
             return {"success": True, "user_data": user}
@@ -127,113 +107,320 @@ class DatabaseEngine:
             print(f"Auth Error: {e}")
             return {"success": False, "message": "Database connection error."}
 
-    # --- CHECK USER (For Forgot Password) ---
+    def verify_kapitan_access(self, scanned_rfid):
+        """Checks if RFID belongs to a Kapitan"""
+        try:
+            clean_rfid = scanned_rfid.strip()
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            cursor.execute("SELECT * FROM users WHERE rfid_code = %s", (clean_rfid,))
+            user = cursor.fetchone()
+            conn.close()
+
+            if user and (user.get('role') == 'Kapitan' or user.get('position') == 'Kapitan'):
+                return True, user
+            return False, None
+
+        except Exception as e:
+            print(f"Kapitan Access Error: {e}")
+            return False, None
+
+    def get_all_users(self):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM users")
+            users = cursor.fetchall()
+            conn.close()
+            return users
+        except:
+            return []
+
+    def update_user_account(self, user_id, first_name, last_name, employee_id, password, role, status, rfid_code,
+                            suspend_val=0, suspend_type="Hours"):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            suspend_until = None
+            if status == "Suspended":
+                if suspend_type == "Hours":
+                    suspend_until = datetime.now() + timedelta(hours=int(suspend_val))
+                else:
+                    suspend_until = datetime.now() + timedelta(days=int(suspend_val))
+
+            query = """
+                UPDATE users 
+                SET first_name=%s, last_name=%s, employee_id=%s, password=%s, role=%s, status=%s, suspension_until=%s, rfid_code=%s
+                WHERE id=%s
+            """
+            cursor.execute(query, (first_name, last_name, employee_id, password, role, status, suspend_until, rfid_code,
+                                   user_id))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Update User Error: {e}")
+            return False
+
+    def get_user_performance_stats(self, officer_name):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT COUNT(*) as total FROM incidents WHERE processed_by = %s", (officer_name,))
+            total = cursor.fetchone()['total']
+            cursor.execute("SELECT COUNT(*) as resolved FROM incidents WHERE processed_by = %s AND status = 'Resolved'",
+                           (officer_name,))
+            resolved = cursor.fetchone()['resolved']
+            conn.close()
+            return {"handled": total, "resolved": resolved}
+        except:
+            return {"handled": 0, "resolved": 0}
+
+    # ==========================================
+    # 🔐 FORGOT PASSWORD SYSTEM
+    # ==========================================
     def check_user_exists(self, emp_id):
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE employee_id = %s", (emp_id,))
-            user = cursor.fetchone()
+            cursor.execute("SELECT id FROM users WHERE employee_id = %s", (emp_id,))
+            exists = cursor.fetchone() is not None
             conn.close()
-            return user is not None
+            return exists
         except:
             return False
 
-    # --- NEW: UPDATE RFID FOR USER ---
-    def link_rfid_card(self, emp_id, rfid_code):
-        """Links a scanned card to a specific user"""
+    def get_user_security_questions(self, emp_id):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT q1, q2, q3 FROM users WHERE employee_id = %s OR username = %s", (emp_id, emp_id))
+            user = cursor.fetchone()
+            conn.close()
+            return user
+        except:
+            return None
+
+    def verify_security_answers(self, emp_id, a1, a2, a3):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT a1, a2, a3 FROM users WHERE employee_id = %s OR username = %s", (emp_id, emp_id))
+            user = cursor.fetchone()
+            conn.close()
+
+            if user and (user['a1'].strip().lower() == a1.strip().lower() and
+                         user['a2'].strip().lower() == a2.strip().lower() and
+                         user['a3'].strip().lower() == a3.strip().lower()):
+                return True
+            return False
+        except:
+            return False
+
+    def reset_user_password(self, emp_id, new_password):
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
-
-            sql = "UPDATE users SET rfid_code = %s WHERE employee_id = %s"
-            cursor.execute(sql, (rfid_code, emp_id))
+            cursor.execute("UPDATE users SET password = %s WHERE employee_id = %s OR username = %s",
+                           (new_password, emp_id, emp_id))
             conn.commit()
+            conn.close()
+            return True
+        except:
+            return False
 
+    def link_rfid_card(self, emp_id, rfid_code):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET rfid_code = %s WHERE employee_id = %s", (rfid_code, emp_id))
+            conn.commit()
             rows = cursor.rowcount
             conn.close()
-
-            if rows > 0:
-                return True, "RFID Linked Successfully!"
-            else:
-                return False, "User not found."
+            return (True, "RFID Linked Successfully!") if rows > 0 else (False, "User not found.")
         except mysql.connector.IntegrityError:
-            return False, "This Card is already linked to another user!"
+            return False, "Card already linked!"
         except Exception as e:
-            return False, f"Error: {e}"
+            return False, str(e)
 
-        # --- INCIDENTS MANAGEMENT ---
-    def save_incident(self, comp, comp_contact, comp_address, resp, resp_contact, resp_address, date, time_str,
-                          zone, category, narrative, officer, status):
-            try:
-                conn = self.get_connection()
-                cursor = conn.cursor()
-
-                # Generate new Case ID (e.g., 2026-001)
-                from datetime import datetime
-                current_year = datetime.now().year
-                cursor.execute("SELECT COUNT(*) as total FROM incidents WHERE YEAR(created_at) = %s", (current_year,))
-                result = cursor.fetchone()
-
-                # Safe checking in case dictionary cursor returns differently
-                total_cases = result['total'] if isinstance(result, dict) else result[0]
-                next_number = total_cases + 1
-                new_case_id = f"{current_year}-{next_number:03d}"
-
-                # ==========================================
-                # THE FIX: Binalik ko na yung mga nawawalang columns!
-                # Siguraduhin lang na itong mga pangalan ng columns na 'to
-                # (complainant_contact, respondent_contact, etc.) ay sakto sa MySQL Workbench mo ah!
-                # ==========================================
-                query = """
-                    INSERT INTO incidents (
-                        case_no, complainant_name, complainant_contact, complainant_address, 
-                        respondent_name, respondent_contact, respondent_address, 
-                        date_of_incident, exact_time, zone, category, narrative, processed_by, status
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-
-                # 14 values para sa 14 na %s! Wala nang kulang!
-                values = (
-                    new_case_id, comp, comp_contact, comp_address,
-                    resp, resp_contact, resp_address,
-                    date, time_str, zone, category, narrative, officer, status
-                )
-
-                cursor.execute(query, values)
-                conn.commit()
-                conn.close()
-                return True, new_case_id
-            except Exception as e:
-                print(f"Error saving incident: {e}")
-                return False, str(e)
-
-    def get_all_incidents(self):
-        """Fetches active incidents (Auto-Archives Resolved cases older than 30 days)"""
+    # ==========================================
+    # 📋 INCIDENTS & BLOTTER MANAGEMENT
+    # ==========================================
+    def save_incident(self, comp, comp_contact, comp_address, resp, resp_contact, resp_address, date, time_str, zone,
+                      category, narrative, officer, status):
         try:
             conn = self.get_connection()
             cursor = conn.cursor(dictionary=True)
 
-            # --- THE TIME TRAVEL SQL TRICK ---
-            # It fetches everything that IS NOT Resolved.
-            # If it IS Resolved, it only fetches it if the created_at date is within the last 30 days!
+            # Generate Case ID
+            current_year = datetime.now().year
+            cursor.execute("SELECT COUNT(*) as total FROM incidents WHERE YEAR(created_at) = %s", (current_year,))
+            total = cursor.fetchone()['total']
+            new_case_id = f"{current_year}-{(total + 1):03d}"
+
+            # NLP Root Words (Optional: Add 'nlp_keywords' to the SQL if your database supports it)
+            # root_words = self.extract_root_words(narrative)
+
+            query = """
+                INSERT INTO incidents (
+                    case_no, complainant_name, complainant_contact, complainant_address, 
+                    respondent_name, respondent_contact, respondent_address, 
+                    date_of_incident, exact_time, zone, category, narrative, processed_by, status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            values = (new_case_id, comp, comp_contact, comp_address, resp, resp_contact, resp_address,
+                      date, time_str, zone, category, narrative, officer, status)
+
+            cursor.execute(query, values)
+            conn.commit()
+            conn.close()
+            return True, new_case_id
+        except Exception as e:
+            print(f"Error saving incident: {e}")
+            return False, str(e)
+
+    def get_all_incidents(self):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
             query = """
                 SELECT * FROM incidents 
-                WHERE status != 'Resolved' 
-                   OR (status = 'Resolved' AND created_at >= NOW() - INTERVAL 30 DAY)
+                WHERE status != 'Resolved' OR (status = 'Resolved' AND created_at >= NOW() - INTERVAL 30 DAY)
                 ORDER BY created_at DESC
             """
-
             cursor.execute(query)
             records = cursor.fetchall()
             conn.close()
             return records
-        except Exception as e:
-            print(f"Error fetching incidents: {e}")
+        except:
             return []
 
+    def get_my_pending_cases(self, officer_name, role):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            if role.lower() in ['kapitan', 'admin']:
+                cursor.execute("SELECT * FROM incidents WHERE status != 'Resolved' ORDER BY created_at DESC")
+            else:
+                cursor.execute(
+                    "SELECT * FROM incidents WHERE status != 'Resolved' AND processed_by = %s ORDER BY created_at DESC",
+                    (officer_name,))
+            records = cursor.fetchall()
+            conn.close()
+            return records
+        except:
+            return []
+
+    def get_incident_categories(self):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT category FROM incidents WHERE category IS NOT NULL AND category != ''")
+            results = cursor.fetchall()
+            conn.close()
+            return [row[0] for row in results] if results else ["Theft", "Physical Assault", "Noise Complaint",
+                                                                "Property Damage", "Trespassing"]
+        except:
+            return ["Theft", "Physical Assault", "Noise Complaint", "Property Damage"]
+
+    def advanced_search_incidents(self, keyword="", category="All Categories", year="All Years", status="All Status"):
+        """Omni-Search Pro: Scans Case IDs/Names + Category + Year + Status Filters"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            query = "SELECT * FROM incidents WHERE 1=1"
+            params = []
+
+            if keyword and keyword.strip() != "":
+                kw = f"%{keyword.strip()}%"
+                query += " AND (case_no LIKE %s OR complainant_name LIKE %s OR respondent_name LIKE %s)"
+                params.extend([kw, kw, kw])
+            if category and category != "All Categories":
+                query += " AND category = %s"
+                params.append(category)
+            if year and year != "All Years":
+                query += " AND YEAR(created_at) = %s"
+                params.append(year)
+            if status and status != "All Status":
+                db_status = "Pending" if status == "Normal" else status
+                query += " AND status = %s"
+                params.append(db_status)
+
+            query += " ORDER BY created_at DESC"
+            cursor.execute(query, tuple(params))
+            results = cursor.fetchall()
+            conn.close()
+            return results
+        except Exception as e:
+            print(f"Omni-Search Error: {e}")
+            return []
+
+    # ==========================================
+    # 🤝 RESOLUTIONS & APPEALS
+    # ==========================================
+    def update_incident_resolution(self, case_id, settlement_text, stage, deadline, officer_name):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT settlement_details FROM incidents WHERE case_no = %s", (case_id,))
+            case = cursor.fetchone()
+
+            if case and case.get('settlement_details'):
+                query = "UPDATE incidents SET settlement_details_2=%s, hearing_stage=%s, compliance_deadline=%s, processed_by=%s, status='Resolved' WHERE case_no=%s"
+            else:
+                query = "UPDATE incidents SET settlement_details=%s, hearing_stage=%s, compliance_deadline=%s, processed_by=%s, status='Resolved' WHERE case_no=%s"
+
+            cursor.execute(query, (settlement_text, stage, deadline, officer_name, case_id))
+            conn.commit()
+            conn.close()
+            return True
+        except:
+            return False
+
+    def request_case_reopen(self, case_no, new_narrative):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE incidents SET reopen_status = 'Requested', narrative_2 = %s WHERE case_no = %s",
+                           (new_narrative, case_no))
+            conn.commit()
+            conn.close()
+            return True
+        except:
+            return False
+
+    def get_reopen_requests(self):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM incidents WHERE reopen_status = 'Requested'")
+            results = cursor.fetchall()
+            conn.close()
+            return results
+        except:
+            return []
+
+    def handle_reopen_request(self, case_no, action):
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            if action == 'Approve':
+                cursor.execute("UPDATE incidents SET status = 'Pending', reopen_status = 'Approved' WHERE case_no = %s",
+                               (case_no,))
+            else:
+                cursor.execute("UPDATE incidents SET reopen_status = 'Denied' WHERE case_no = %s", (case_no,))
+            conn.commit()
+            conn.close()
+            return True
+        except:
+            return False
+
+    # ==========================================
+    # 📊 ANALYTICS & DASHBOARD
+    # ==========================================
     def get_dashboard_stats(self):
-        """Calculates the numbers for the Dashboard stat cards"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -244,15 +431,12 @@ class DatabaseEngine:
             stats = {'Total Cases': 0, 'Pending': 0, 'Resolved': 0, 'Urgent': 0}
             for row in rows:
                 stats['Total Cases'] += row['count']
-                if row['status'] in stats:
-                    stats[row['status']] = row['count']
+                if row['status'] in stats: stats[row['status']] = row['count']
             return stats
-        except Exception as e:
-            print(f"Error fetching stats: {e}")
+        except:
             return {'Total Cases': 0, 'Pending': 0, 'Resolved': 0, 'Urgent': 0}
 
     def get_incident_analytics(self):
-        """Calculates the top hotspot and peak hours from all incidents"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -260,690 +444,197 @@ class DatabaseEngine:
             records = cursor.fetchall()
             conn.close()
 
-            # If the database is empty, return defaults
-            if not records:
-                return {"hotspot": "No Data", "hotspot_pct": 0.0, "peak_hours": "No Data"}
+            if not records: return {"hotspot": "No Data", "hotspot_pct": 0.0, "peak_hours": "No Data"}
 
             from collections import Counter
-            from datetime import datetime
-
-            # --- 1. HOTSPOT MATH ---
             zones = [r['zone'] for r in records if r['zone']]
+            top_zone = "Unknown"
+            hotspot_pct = 0.0
             if zones:
-                zone_counts = Counter(zones)
-                top_zone, top_count = zone_counts.most_common(1)[0]
-                hotspot_pct = top_count / len(zones)  # Calculate percentage
-            else:
-                top_zone = "Unknown"
-                hotspot_pct = 0.0
+                top_zone, top_count = Counter(zones).most_common(1)[0]
+                hotspot_pct = top_count / len(zones)
 
-            # --- 2. PEAK HOUR MATH ---
             hours = []
             for r in records:
-                t_str = r['exact_time']
-                if t_str:
+                if r['exact_time']:
                     try:
-                        # Convert "03:15 PM" into a strict hour block (e.g., 15)
-                        t_obj = datetime.strptime(t_str, "%I:%M %p")
-                        hours.append(t_obj.hour)
+                        hours.append(datetime.strptime(r['exact_time'], "%I:%M %p").hour)
                     except:
                         pass
 
+            peak_str = "Unknown"
             if hours:
-                hour_counts = Counter(hours)
-                peak_hour = hour_counts.most_common(1)[0][0]
-
-                # Format back to nice 12-hour AM/PM text (e.g., "3 PM - 4 PM")
-                start_time = datetime.strptime(str(peak_hour), "%H").strftime("%I %p").lstrip("0")
-                end_time = datetime.strptime(str((peak_hour + 1) % 24), "%H").strftime("%I %p").lstrip("0")
-                peak_str = f"{start_time} - {end_time}"
-            else:
-                peak_str = "Unknown"
+                peak_hour = Counter(hours).most_common(1)[0][0]
+                start_t = datetime.strptime(str(peak_hour), "%H").strftime("%I %p").lstrip("0")
+                end_t = datetime.strptime(str((peak_hour + 1) % 24), "%H").strftime("%I %p").lstrip("0")
+                peak_str = f"{start_t} - {end_t}"
 
             return {"hotspot": top_zone, "hotspot_pct": hotspot_pct, "peak_hours": peak_str}
-
-        except Exception as e:
-            print(f"Error getting analytics: {e}")
+        except:
             return {"hotspot": "Error", "hotspot_pct": 0.0, "peak_hours": "Error"}
 
-    def update_incident_resolution(self, case_id, settlement_text, stage, deadline, officer_name):
-        """Smart save: Auto-detects if it should save to Phase 1 or Phase 2"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            # Check if Phase 1 already exists
-            cursor.execute("SELECT settlement_details FROM incidents WHERE case_no = %s", (case_id,))
-            case = cursor.fetchone()
-
-            if case and case.get('settlement_details'):
-                # Phase 1 exists! Save this to Phase 2.
-                query = """
-                    UPDATE incidents 
-                    SET settlement_details_2 = %s, hearing_stage = %s, compliance_deadline = %s, 
-                        processed_by = %s, status = 'Resolved' 
-                    WHERE case_no = %s
-                """
-            else:
-                # First time resolving! Save to Phase 1.
-                query = """
-                    UPDATE incidents 
-                    SET settlement_details = %s, hearing_stage = %s, compliance_deadline = %s, 
-                        processed_by = %s, status = 'Resolved' 
-                    WHERE case_no = %s
-                """
-
-            cursor.execute(query, (settlement_text, stage, deadline, officer_name, case_id))
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            print(f"Resolution Save Error: {e}")
-            return False
-
-    def get_smart_suggestion(self, current_narrative, zone):
-        """Uses TF-IDF Machine Learning to find the closest past settlement"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            # 1. Fetch only RESOLVED cases from the SAME ZONE that have a settlement
-            query = """
-                    SELECT narrative, settlement_details \
-                    FROM incidents
-                    WHERE status = 'Resolved' \
-                      AND zone = %s
-                      AND settlement_details IS NOT NULL \
-                      AND settlement_details != '' \
-                    """
-            cursor.execute(query, (zone,))
-            past_cases = cursor.fetchall()
-            conn.close()
-
-            # If there is no history for this zone yet, return a default message
-            if not past_cases:
-                return ["No past data for this zone yet. Manual entry required."]
-
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            from sklearn.metrics.pairwise import cosine_similarity
-
-            # 2. Prepare the text for the ML
-            past_narratives = [case['narrative'] for case in past_cases]
-            past_narratives.append(current_narrative)  # Add the current unsolved case at the end
-
-            # 3. The Math: Convert words to numbers and compare them
-            vectorizer = TfidfVectorizer(stop_words='english')
-            tfidf_matrix = vectorizer.fit_transform(past_narratives)
-
-            # Compare the very last item (current case) against all previous items
-            similarities = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1])
-
-            # 4. Find the absolute best match
-            best_match_index = similarities[0].argmax()
-            best_score = similarities[0][best_match_index]
-
-            # If it's a completely unique case with no similarities
-            if best_score < 0.1:
-                return ["No highly similar past cases found. Please manually formulate a settlement."]
-
-            # 5. Grab the settlement from that best match!
-            best_settlement = past_cases[best_match_index]['settlement_details']
-
-            return [f"+ {best_settlement}"]
-
-        except Exception as e:
-            print(f"ML Error: {e}")
-            return ["Error generating AI suggestion. Check terminal."]
-
-    def verify_kapitan_access(self, scanned_rfid):
-        """Checks the database using the correct rfid_code column and scrubs hidden keystrokes"""
-        try:
-            # 1. Scrub the hidden "Enter" key or spaces off the scan
-            clean_rfid = scanned_rfid.strip()
-
-            print(f"\n--- RFID SCANNER DIAGNOSTIC ---")
-            print(f"Cleaned scan for database: '{clean_rfid}'")
-
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            # 2. THE FIX: Search using the exact 'rfid_code' column!
-            query = "SELECT * FROM users WHERE rfid_code = %s"
-            cursor.execute(query, (clean_rfid,))
-            user = cursor.fetchone()
-            conn.close()
-
-            if user:
-                print(f"-> SUCCESS: Found user in database: {user.get('first_name')} {user.get('last_name')}")
-
-                db_role = user.get('role', '')
-                db_pos = user.get('position', '')
-
-                # 3. Check if they are actually the Kapitan
-                if db_role == 'Kapitan' or db_pos == 'Kapitan':
-                    print("-> VERIFIED: Kapitan access granted.")
-                    return True, user
-                else:
-                    print(f"-> REJECTED: User exists, but rank is Role: '{db_role}', Position: '{db_pos}'")
-                    return False, None
-            else:
-                print("-> REJECTED: Could not find that exact rfid_code in the database.")
-                return False, None
-
-        except Exception as e:
-            print(f"CRITICAL DB ERROR: {e}")
-            return False
-
-        # ==========================================
-        # AI SMART SUGGESTION ENGINE (FIXED TABLE NAME)
-        # ==========================================
-    def get_resolution_suggestion(self, narrative, zone, category):
-            import difflib
-            try:
-                print(f"\n--- AI DEBUG START ---")
-                print(f"Searching for: Category='{category}' in table 'incidents'")
-
-                conn = self.get_connection()
-                # Siguraduhing Dictionary=True para gumana yung .get()
-                cursor = conn.cursor(dictionary=True)
-
-                # THE FIX: Pinalitan ang incident_blotter ng 'incidents'
-                query = """
-                    SELECT narrative, settlement_details 
-                    FROM incidents 
-                    WHERE status = 'Resolved' AND category = %s
-                """
-                cursor.execute(query, (category,))
-                past_cases = cursor.fetchall()
-                conn.close()
-
-                print(f"Found {len(past_cases)} resolved cases.")
-
-                if not past_cases:
-                    return []
-
-                suggestions = []
-                for case in past_cases:
-                    past_narrative = case.get('narrative', '')
-                    settlement = case.get('settlement_details', '')
-
-                    if not past_narrative or not settlement:
-                        continue
-
-                    # Compute Similarity using SequenceMatcher
-                    similarity = difflib.SequenceMatcher(None, narrative.lower(), past_narrative.lower()).ratio()
-                    match_percentage = int(similarity * 100)
-
-                    # Filter: Ipakita lang ang 40% pataas (QA requirement)
-                    if match_percentage >= 40:
-                        suggestions.append({
-                            'text': settlement,
-                            'score': match_percentage
-                        })
-
-                # Sort: Pinakamataas na match ang nasa taas
-                suggestions.sort(key=lambda x: x['score'], reverse=True)
-
-                # Return Top 3 unique suggestions
-                unique_suggestions = []
-                seen_texts = set()
-                for s in suggestions:
-                    if s['text'] not in seen_texts:
-                        unique_suggestions.append(s)
-                        seen_texts.add(s['text'])
-                    if len(unique_suggestions) >= 3:
-                        break
-
-                print(f"--- AI DEBUG END ---\n")
-                return unique_suggestions
-
-            except Exception as e:
-                print(f"AI Suggestion Error: {e}")
-                return []
-
-    def get_next_case_id(self):
-        """Peeks at the database to calculate what the next Case ID will be"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            # Find the highest existing case_no
-            cursor.execute("SELECT MAX(case_no) as max_id FROM incidents")
-            result = cursor.fetchone()
-            conn.close()
-
-            # If the database has cases, add 1. If it's completely empty, start at 1!
-            if result and result['max_id']:
-                return result['max_id'] + 1
-            else:
-                return 1
-
-        except Exception as e:
-            print(f"Error calculating next ID: {e}")
-            return "???"
-
-    def get_all_users(self):
-        """Fetches all registered users for the Admin Dashboard"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM users")  # Adjust table name if yours is different!
-            users = cursor.fetchall()
-            conn.close()
-            return users
-        except Exception as e:
-            print(f"Error fetching users: {e}")
-            return []
-
-    def get_user_performance_stats(self, officer_name):
-        """Counts how many cases an officer has handled and resolved"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            # Count Total Handled (Any status)
-            cursor.execute("SELECT COUNT(*) as total FROM incidents WHERE processed_by = %s", (officer_name,))
-            total_handled = cursor.fetchone()['total']
-
-            # Count Resolved
-            cursor.execute("SELECT COUNT(*) as resolved FROM incidents WHERE processed_by = %s AND status = 'Resolved'",
-                           (officer_name,))
-            total_resolved = cursor.fetchone()['resolved']
-
-            conn.close()
-            return {"handled": total_handled, "resolved": total_resolved}
-        except Exception as e:
-            print(f"Error fetching stats: {e}")
-            return {"handled": 0, "resolved": 0}
-
-        # THE FIX: Added 'rfid_code' to the arguments!
-
-    def update_user_account(self, user_id, first_name, last_name, employee_id, password, role, status, rfid_code,
-                            suspend_val=0, suspend_type="Hours"):
-        """Updates user details (including RFID) and calculates future suspension dates"""
-        try:
-            from datetime import datetime, timedelta
-            conn = self.get_connection()
-            cursor = conn.cursor()
-
-            suspend_until = None
-
-            if status == "Suspended":
-                if suspend_type == "Hours":
-                    suspend_until = datetime.now() + timedelta(hours=int(suspend_val))
-                else:
-                    suspend_until = datetime.now() + timedelta(days=int(suspend_val))
-
-            # THE FIX: Changed 'username' to 'employee_id' to perfectly match your database!
-            query = """
-                UPDATE users 
-                SET first_name=%s, last_name=%s, employee_id=%s, password=%s, role=%s, status=%s, suspension_until=%s, rfid_code=%s
-                WHERE id=%s
-            """
-
-            cursor.execute(query, (first_name, last_name, employee_id, password, role, status, suspend_until, rfid_code,
-                                   user_id))
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            print(f"Error updating user: {e}")
-            return False
-
-    def get_my_pending_cases(self, officer_name, role):
-        """Fetches pending cases. Staff only see their own. Kapitan sees all."""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            if role.lower() in ['kapitan', 'admin']:
-                # Kapitan God Mode: Sees ALL pending cases to override if needed
-                query = "SELECT * FROM incidents WHERE status != 'Resolved' ORDER BY created_at DESC"
-                cursor.execute(query)
-            else:
-                # Normal Staff: Only sees cases they personally processed
-                query = "SELECT * FROM incidents WHERE status != 'Resolved' AND processed_by = %s ORDER BY created_at DESC"
-                cursor.execute(query, (officer_name,))
-
-            records = cursor.fetchall()
-            conn.close()
-            return records
-        except Exception as e:
-            print(f"Error fetching pending cases: {e}")
-            return []
-
     # ==========================================
-    # FORGOT PASSWORD SYSTEM
+    # 🛡️ SYSTEM AUDITS & SECURITY LOGS
     # ==========================================
-    def get_user_security_questions(self, emp_id):
-        """Fetches the 3 security questions for a specific employee ID"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT q1, q2, q3 FROM users WHERE employee_id = %s OR username = %s", (emp_id, emp_id))
-            user = cursor.fetchone()
-            conn.close()
-            return user  # Returns the questions, or None if user doesn't exist
-        except Exception as e:
-            print(f"Error fetching questions: {e}")
-            return None
-
-    def verify_security_answers(self, emp_id, a1, a2, a3):
-        """Checks if the provided answers match the database (Case-Insensitive)"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT a1, a2, a3 FROM users WHERE employee_id = %s OR username = %s", (emp_id, emp_id))
-            user = cursor.fetchone()
-            conn.close()
-
-            if user:
-                # We use .lower() and .strip() so it doesn't fail if they accidentally capitalized a letter!
-                if (user['a1'].strip().lower() == a1.strip().lower() and
-                        user['a2'].strip().lower() == a2.strip().lower() and
-                        user['a3'].strip().lower() == a3.strip().lower()):
-                    return True
-            return False
-        except Exception as e:
-            print(f"Error verifying answers: {e}")
-            return False
-
-    def reset_user_password(self, emp_id, new_password):
-        """Saves the new password to the database"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE users SET password = %s WHERE employee_id = %s OR username = %s",
-                           (new_password, emp_id, emp_id))
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            print(f"Error resetting password: {e}")
-            return False
-
-    def get_incident_categories(self):
-        """Fetches a list of all unique categories ever typed into the system"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            # Grabs only unique categories, ignores blanks!
-            cursor.execute("SELECT DISTINCT category FROM incidents WHERE category IS NOT NULL AND category != ''")
-            results = cursor.fetchall()
-            conn.close()
-
-            # If the database has categories, return them. Otherwise, provide some defaults!
-            if results:
-                return [row[0] for row in results]
-            else:
-                return ["Theft", "Physical Assault", "Noise Complaint", "Property Damage", "Trespassing"]
-        except Exception as e:
-            print(f"Error fetching categories: {e}")
-            return ["Theft", "Physical Assault", "Noise Complaint", "Property Damage"]
-
-    def advanced_search_incidents(self, keyword="", category="All Categories"):
-        """Omni-Search: Scans Case IDs and Names simultaneously, filtered by Category"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            # Start with a base query
-            query = "SELECT * FROM incidents WHERE 1=1"
-            params = []
-
-            # 1. Apply the Omni-Search Keyword
-            if keyword and keyword.strip() != "":
-                kw = f"%{keyword.strip()}%"
-                # It checks the Case ID, the Complainant, AND the Respondent!
-                query += " AND (case_no LIKE %s OR complainant_name LIKE %s OR respondent_name LIKE %s)"
-                params.extend([kw, kw, kw])
-
-            # 2. Apply the Category Filter
-            if category and category != "All Categories":
-                query += " AND category = %s"
-                params.append(category)
-
-            # Put the newest cases at the top
-            query += " ORDER BY created_at DESC"
-
-            cursor.execute(query, tuple(params))
-            results = cursor.fetchall()
-            conn.close()
-
-            return results
-        except Exception as e:
-            print(f"Omni-Search Error: {e}")
-            return []
-
-    def reopen_case_direct(self, case_no, second_narrative):
-        """Staff directly re-opens a case. Sets to Pending and saves Narrative 2."""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            query = "UPDATE incidents SET status = 'Pending', narrative_2 = %s WHERE case_no = %s"
-            cursor.execute(query, (second_narrative, case_no))
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            print(f"Direct Reopen Error: {e}")
-            return False
-
-# ==========================================
-    # APPEALS & KAPITAN APPROVAL SYSTEM
-    # ==========================================
-    def request_case_reopen(self, case_no, new_narrative):
-        """Staff requests a re-open. Flags it for the Kapitan."""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            query = "UPDATE incidents SET reopen_status = 'Requested', narrative_2 = %s WHERE case_no = %s"
-            cursor.execute(query, (new_narrative, case_no))
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            return False
-
-    def get_reopen_requests(self):
-        """Kapitan fetches all pending appeals"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM incidents WHERE reopen_status = 'Requested'")
-            results = cursor.fetchall()
-            conn.close()
-            return results
-        except Exception as e:
-            return []
-
-    def handle_reopen_request(self, case_no, action):
-        """Kapitan approves or denies the request"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            if action == 'Approve':
-                # Unlocks the case and makes it Pending again!
-                query = "UPDATE incidents SET status = 'Pending', reopen_status = 'Approved' WHERE case_no = %s"
-            else:
-                query = "UPDATE incidents SET reopen_status = 'Denied' WHERE case_no = %s"
-            cursor.execute(query, (case_no,))
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            return False
-
-    # Hanapin mo yung class DatabaseEngine: tapos i-paste mo 'to sa loob ha?
-    # Wag sa labas, magkaka-error ka na naman! Wag din kalimutan ang proper indentation!
-
     def log_user_login(self, name, role):
         try:
-            from datetime import datetime
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-            # THE FIX: Gumamit ng get_connection() na swak sa setup mo!
             conn = self.get_connection()
             cursor = conn.cursor()
-
-            query = "INSERT INTO login_audit (employee_name, role, login_time) VALUES (%s, %s, %s)"
-            cursor.execute(query, (name, role, now))
+            cursor.execute("INSERT INTO login_audit (employee_name, role, login_time) VALUES (%s, %s, %s)",
+                           (name, role, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
             conn.commit()
-
             last_id = cursor.lastrowid
-
-            cursor.close()
-            conn.close()  # Wag kalimutan isara!
+            conn.close()
             return last_id
-        except Exception as e:
-            print(f"Audit Log Error: {e}")
+        except:
             return None
 
     def log_user_logout(self, audit_id):
         if not audit_id: return
         try:
-            from datetime import datetime
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-            # THE FIX AGAIN
             conn = self.get_connection()
             cursor = conn.cursor()
-
-            query = "UPDATE login_audit SET logout_time = %s WHERE audit_id = %s"
-            cursor.execute(query, (now, audit_id))
+            cursor.execute("UPDATE login_audit SET logout_time = %s WHERE audit_id = %s",
+                           (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), audit_id))
             conn.commit()
-
-            cursor.close()
             conn.close()
-        except Exception as e:
-            print(f"Audit Logout Error: {e}")
+        except:
+            pass
 
     def get_login_logs(self):
         try:
-            # AND THE FIX AGAIN
             conn = self.get_connection()
-            cursor = conn.cursor()
-
-            query = "SELECT employee_name, role, login_time, logout_time FROM login_audit ORDER BY login_time DESC"
-            cursor.execute(query)
-
-            columns = [col[0] for col in cursor.description]
-            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-            cursor.close()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT employee_name, role, login_time, logout_time FROM login_audit ORDER BY login_time DESC")
+            records = cursor.fetchall()
             conn.close()
-            return results
-        except Exception as e:
-            print(f"Error fetching logs: {e}")
+            return records
+        except:
             return []
 
     def log_security_event(self, user_id, action, details):
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
-            query = "INSERT INTO security_logs (user_id, action_type, details) VALUES (%s, %s, %s)"
-            cursor.execute(query, (user_id, action, details))
+            cursor.execute("INSERT INTO security_logs (user_id, action_type, details) VALUES (%s, %s, %s)",
+                           (user_id, action, details))
             conn.commit()
             conn.close()
-        except Exception as e:
-            print(f"Security Logging Error: {e}")
-
-    # ==========================================
-    # SECURITY ALERTS LOGIC (TAGA-BASA AT TAGA-UPDATE)
-    # ==========================================
+        except:
+            pass
 
     def get_security_logs(self):
         try:
             conn = self.get_connection()
             cursor = conn.cursor(dictionary=True)
-
-            # =========================================================
-            # THE BULLETPROOF JOIN QUERY
-            # =========================================================
             query = """
-                SELECT 
-                    sl.log_id, 
-                    sl.user_id, 
-                    -- CONCAT_WS: Pinagsasama kahit may null. IFNULL: Pag wala talaga, 'Unknown' ang ilalagay.
-                    IFNULL(CONCAT_WS(' ', u.first_name, u.last_name), 'Unknown User') AS employee_name, 
-                    sl.action_type AS action, 
-                    sl.details, 
-                    sl.created_at AS timestamp, 
-                    sl.is_read 
+                SELECT sl.log_id, sl.user_id, IFNULL(CONCAT_WS(' ', u.first_name, u.last_name), 'Unknown User') AS employee_name, 
+                       sl.action_type AS action, sl.details, sl.created_at AS timestamp, sl.is_read 
                 FROM security_logs sl
-                -- ⚠️ BOSSING, CHECK MO 'TONG LINYA NA 'TO! ⚠️
-                -- Kung 'employee_id' o 'emp_id' ang tawag mo dun sa 231131 sa users table, palitan mo yung u.id!
                 LEFT JOIN users u ON sl.user_id = u.employee_id 
                 ORDER BY sl.created_at DESC
             """
-
             cursor.execute(query)
             records = cursor.fetchall()
             conn.close()
             return records
-
-        except Exception as e:
-            print(f"Error fetching security logs: {e}")
+        except:
             return []
-
-    def get_security_alerts(self):  # (O kung anuman ang pangalan ng function mo)
-        try:
-            # THE FIX: Idagdag ang dictionary=True para pwede yung .get() sa frontend!
-            cursor = self.conn.cursor(dictionary=True)
-
-            # (Yung query mo na SELECT * FROM security_logs...)
-            query = "SELECT * FROM security_logs ORDER BY created_at DESC"
-            cursor.execute(query)
-
-            records = cursor.fetchall()
-            return records
-        except Exception as e:
-            print(f"Error fetching alerts: {e}")
-            return []
-
-    def mark_security_log_read(self, log_id):
-        """Gagawing 'read' yung notification pag kinlick ni Kapitan"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-
-            # I-u-update yung is_read column to 1 (True)
-            query = "UPDATE security_logs SET is_read = 1 WHERE log_id = %s"
-            cursor.execute(query, (log_id,))
-            conn.commit()
-
-            conn.close()
-            return True
-        except Exception as e:
-            print(f"Error marking log as read: {e}")
-            return False
-
-    def paraphrase_logic(self, old_settlement, comp_name, resp_name):
-        # Ang goal dito: Palitan yung generic terms ng real names
-        new_text = old_settlement
-
-        # Handle lowercase
-        new_text = new_text.replace("respondent", resp_name)
-        new_text = new_text.replace("complainant", comp_name)
-
-        # Handle Capitalized
-        new_text = new_text.replace("Respondent", resp_name)
-        new_text = new_text.replace("Complainant", comp_name)
-
-        return new_text
 
     def mark_alert_as_read(self, log_id):
-        """Tinatawag 'to kapag kinlik ni Kapitan yung alert para mabasa"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
-
-            query = "UPDATE security_logs SET is_read = 1 WHERE log_id = %s"
-            cursor.execute(query, (log_id,))
-
+            cursor.execute("UPDATE security_logs SET is_read = 1 WHERE log_id = %s", (log_id,))
             conn.commit()
             conn.close()
             return True
-        except Exception as e:
-            print(f"Failed to mark alert as read: {e}")
+        except:
             return False
+
+    # ==========================================
+    # 🧠 MACHINE LEARNING & NLP UTILITIES
+    # ==========================================
+    def extract_root_words(self, text):
+        if not text: return ""
+        clean_text = re.sub(r'[^\w\s]', '', text.lower())
+        words = clean_text.split()
+
+        root_mapping = {
+            'ingay': ['maingay', 'nagiingay', 'nag iingay', 'mag iingay', 'mag-iingay', 'ma-ingay', 'ingayan'],
+            'away': ['nagaaway', 'nag-aaway', 'nag aaway', 'nagaway', 'nag-away', 'mag-aaway', 'magkaaway'],
+            'utang': ['nangutang', 'umutang', 'mangungutang', 'pautang', 'inutang', 'uutang', 'utangan'],
+            'nakaw': ['ninakaw', 'magnanakaw', 'ninakawan', 'nanakaw', 'ninanakaw', 'nagnakaw'],
+            'kagat': ['kinagat', 'nangagat', 'nakagat', 'nangangagat', 'kinakagat'],
+            'banta': ['nagbanta', 'binantaan', 'nagbabanta', 'pagbabanta', 'pananakot', 'nanakot', 'tinakot'],
+            'chismis': ['chinismis', 'nagchichismisan', 'chismisan', 'tsismis', 'nagtsitsismisan', 'tsismosa',
+                        'chismosa'],
+            'kalat': ['nagkalat', 'makalat', 'kinakalat', 'nagkakalat', 'tapon', 'nagtapon']
+        }
+
+        found_roots = []
+        for word in words:
+            for root, variations in root_mapping.items():
+                if word in variations or word == root:
+                    if root not in found_roots: found_roots.append(root)
+        return ", ".join(found_roots)
+
+    def get_resolution_suggestion(self, narrative, zone, category):
+        """Unified Smart Suggestion leveraging NLP and SequenceMatcher"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            # Use zone AND category for tighter filtering
+            cursor.execute(
+                "SELECT narrative, settlement_details FROM incidents WHERE status = 'Resolved' AND category = %s AND zone = %s",
+                (category, zone))
+            past_cases = cursor.fetchall()
+            conn.close()
+
+            if not past_cases: return []
+
+            # 1. Get root words of current complaint
+            current_roots = self.extract_root_words(narrative)
+
+            suggestions = []
+            for case in past_cases:
+                past_narrative = case.get('narrative', '')
+                settlement = case.get('settlement_details', '')
+                if not past_narrative or not settlement: continue
+
+                # 2. Get root words of past complaint
+                past_roots = self.extract_root_words(past_narrative)
+
+                # 3. Calculate similarity (Boosted if root words match!)
+                similarity = difflib.SequenceMatcher(None, narrative.lower(), past_narrative.lower()).ratio()
+
+                if current_roots and past_roots and any(r in past_roots for r in current_roots.split(', ')):
+                    similarity += 0.3  # 30% Boost if root words match!
+
+                match_percentage = int(min(similarity * 100, 100))  # Cap at 100%
+
+                if match_percentage >= 40:
+                    suggestions.append({'text': settlement, 'score': match_percentage})
+
+            # Sort and return unique top 3
+            suggestions.sort(key=lambda x: x['score'], reverse=True)
+            unique_suggestions = []
+            seen_texts = set()
+            for s in suggestions:
+                if s['text'] not in seen_texts:
+                    unique_suggestions.append(s)
+                    seen_texts.add(s['text'])
+                if len(unique_suggestions) >= 3: break
+
+            return unique_suggestions
+
+        except Exception as e:
+            print(f"AI Suggestion Error: {e}")
+            return []
+
+    def paraphrase_logic(self, old_settlement, comp_name, resp_name):
+        new_text = old_settlement
+        new_text = new_text.replace("respondent", resp_name).replace("complainant", comp_name)
+        new_text = new_text.replace("Respondent", resp_name).replace("Complainant", comp_name)
+        return new_text
