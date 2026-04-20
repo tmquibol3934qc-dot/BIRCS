@@ -25,8 +25,19 @@ class ResolutionPage:
         self.left_panel.pack(side="left", fill="y", padx=(0, 20))
         self.left_panel.pack_propagate(False)
 
-        ctk.CTkLabel(self.left_panel, text="My Pending Cases", font=("Arial", 16, "bold"),
-                     text_color=self.text_dark).pack(pady=(15, 10))
+        # ==========================================
+        # 🛑 THE FIX: Header Frame na may Refresh Button
+        # ==========================================
+        header_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(15, 10), padx=15)
+
+        ctk.CTkLabel(header_frame, text="My Pending Cases", font=("Arial", 16, "bold"),
+                     text_color=self.text_dark).pack(side="left")
+
+        # Kapag kinlik 'to, tatawagin niya ulit 'yung load_pending_cases para kumuha ng bagong data sa DB!
+        ctk.CTkButton(header_frame, text="🔄", width=30, height=30, fg_color="#F0F0F0",
+                      text_color="black", hover_color="#E0E0E0",
+                      command=self.load_pending_cases).pack(side="right")
         self.case_list_frame = ctk.CTkScrollableFrame(self.left_panel, fg_color="transparent")
         self.case_list_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
