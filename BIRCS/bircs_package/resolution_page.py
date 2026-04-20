@@ -179,7 +179,46 @@ class ResolutionPage:
         settlement_text = self.resolution_input.get("1.0", "end-1c").strip()
         officer_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}".strip()
 
+        # ==========================================
+        # 🛑 VALIDATION 1: Bawal ang walang laman!
+        # ==========================================
+        if not settlement_text:
+            messagebox.showerror("Missing Information",
+                                 "Please add some information before proceeding")
+            return
+
+        # ==========================================
+        # 🛑 VALIDATION 2: Anti-Tamad / Anti-Nonsense Check!
+        # ==========================================
+        # Required na at least 15 characters ang i-type nila.
+        if len(settlement_text) < 15:
+            messagebox.showwarning("Warning",
+                                   "Too short please make sure settlement has enough reasoning.")
+            return
+
+        # ==========================================
+        # 🛑 VALIDATION 3: The "Yes or No" Prompt
+        # ==========================================
+        confirm = messagebox.askyesno(
+            "Confirm Resolution",
+            "Please be ensure the settlement case."
+        )
+
+        if not confirm:
+            return  # Kapag nag-No, cancel ang submission. Wala siyang gagawin.
+
+        # ==========================================
+        # ✅ KUNG PUMASA SA LAHAT, DITO NA MAG-S-SAVE!
+        # ==========================================
         if self.engine.update_incident_resolution(self.selected_case.get('case_no'), settlement_text, "Stage", "0",
                                                   officer_name):
-            messagebox.showinfo("Success", "Resolution saved!")
+            messagebox.showinfo("Success", "Case has been successfully resolved and locked!")
+
+            # Reset UI after successful save para hindi na ma-click ulit
+            self.form_header.configure(text="Select a case from the left to resolve", text_color="gray")
+            for widget in self.details_frame.winfo_children():
+                widget.destroy()
+
             self.load_pending_cases()
+        else:
+            messagebox.showerror("Database Error", "Failed to save resolution.")
