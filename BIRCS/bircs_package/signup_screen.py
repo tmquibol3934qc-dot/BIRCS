@@ -3,19 +3,19 @@ from tkinter import messagebox, filedialog
 from PIL import Image
 import os
 import re
-import shutil  # BAGONG IMPORT para sa pag-copy ng images
+import shutil
 
 
 class SignupWindow:
     def __init__(self, parent_root, engine, is_admin_mode=False, on_refresh=None):
         self.parent_root = parent_root
         self.engine = engine
-        self.is_admin_mode = is_admin_mode  # Tells the window WHO opened it
-        self.on_refresh = on_refresh  # Tells the window how to refresh the Admin list
+        self.is_admin_mode = is_admin_mode  
+        self.on_refresh = on_refresh  
 
         # --- WINDOW SETUP ---
         self.window = ctk.CTkToplevel()
-        self.window.overrideredirect(True)  # Frameless
+        self.window.overrideredirect(True)
         self.window.title("BIRCS - Create Account")
 
         w, h = 1000, 700
@@ -25,34 +25,37 @@ class SignupWindow:
         y = int((sh / 2) - (h / 2))
         self.window.geometry(f"{w}x{h}+{x}+{y}")
 
-        # If admin mode, make sure it stays on top of the dashboard!
         if self.is_admin_mode:
             self.window.transient(self.parent_root)
             self.window.grab_set()
 
-        # Design Settings
+        # 🚀 POGI UPDATE: Match Login Colors!
         self.color_orange = "#E79124"
         self.color_gray_btn = "#666666"
-        self.color_red = "#FF5555"
-        self.color_green = "#6A9C4E"
+        self.color_red = "#E74C3C"
+        self.color_green = "#27AE60"
+        self.text_dark = "#2C3E50"
 
         self.ui_font = "Poppins"
         self.header_font = "Young Serif"
 
-        # Handle Closing
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
-
-        # Load Images
         self.load_images()
 
         # --- MAIN LAYOUT ---
-        self.create_top_bar()
         self.bg_label = ctk.CTkLabel(self.window, text="", image=self.bg_image)
         self.bg_label.pack(fill="both", expand=True)
 
-        self.card = ctk.CTkScrollableFrame(self.bg_label, width=500, height=550,
-                                           fg_color="white", corner_radius=10)
+        # 🚀 POGI UPDATE: Floating Clean Card!
+        self.card = ctk.CTkScrollableFrame(self.bg_label, width=550, height=600,
+                                           fg_color="white", corner_radius=15)
         self.card.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Back Button (Top Left of Card)
+        self.back_btn = ctk.CTkButton(self.card, text="✕", width=30, fg_color="transparent",
+                                      text_color="gray", font=("Arial", 18, "bold"),
+                                      hover_color="#F0F0F0", command=self.handle_back)
+        self.back_btn.pack(anchor="nw", pady=(10, 0), padx=10)
 
         # --- INITIALIZE STEPS ---
         self.step1_frame = ctk.CTkFrame(self.card, fg_color="white")
@@ -70,24 +73,12 @@ class SignupWindow:
             bg_path = os.path.join(current_path, "background.jpg")
             raw_img = Image.open(bg_path).convert("RGBA")
             raw_img = raw_img.resize((1000, 700))
-            overlay = Image.new("RGBA", raw_img.size, (255, 255, 255, 200))
+            overlay = Image.new("RGBA", raw_img.size, (255, 255, 255, 180)) # Match Login opacity
             final_bg = Image.alpha_composite(raw_img, overlay)
             self.bg_image = ctk.CTkImage(light_image=final_bg, size=(1000, 700))
         except Exception:
             self.bg_image = None
 
-    def create_top_bar(self):
-        top_bar = ctk.CTkFrame(self.window, height=60, fg_color=self.color_orange, corner_radius=0)
-        top_bar.pack(side="top", fill="x")
-        self.top_back_btn = ctk.CTkButton(top_bar, text="←", width=40, fg_color="transparent",
-                                          font=("Arial", 20, "bold"), hover_color="#C67B1D",
-                                          command=self.handle_back)
-        self.top_back_btn.pack(side="left", padx=10)
-        ctk.CTkLabel(top_bar, text="🏛 BIRCS", font=("Arial", 20, "bold"), text_color="white").pack(side="left", padx=10)
-
-    # =========================================================================
-    # THE BOUNCER: Limit Character Input Logic (FIXED FOR CTkEntry)
-    # =========================================================================
     def limit_input(self, entry, limit, num_only, no_num):
         val = entry.get()
         new_val = val
@@ -99,18 +90,17 @@ class SignupWindow:
         if len(new_val) > limit:
             new_val = new_val[:limit]
 
-        # THE FIX: CTkEntry uses delete and insert, NOT set()!
         if val != new_val:
             entry.delete(0, "end")
             entry.insert(0, new_val)
 
     # =========================================================================
-    # STEP 1: PERSONAL INFORMATION & RFID
+    # STEP 1: PERSONAL INFORMATION
     # =========================================================================
     def build_step_1(self):
         title_frame = ctk.CTkFrame(self.step1_frame, fg_color="transparent")
-        title_frame.pack(fill="x", pady=(20, 10))
-        ctk.CTkLabel(title_frame, text="CREATE ACCOUNT", font=(self.header_font, 24, "bold"),
+        title_frame.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(title_frame, text="CREATE ACCOUNT", font=(self.header_font, 26, "bold"),
                      text_color=self.color_orange).pack()
         ctk.CTkLabel(title_frame, text="Step 1 of 2: Personal Details", font=(self.ui_font, 12),
                      text_color="gray").pack()
@@ -118,235 +108,267 @@ class SignupWindow:
         grid_frame = ctk.CTkFrame(self.step1_frame, fg_color="white")
         grid_frame.pack(padx=20, fill="x")
 
-        # THE FIX: Added strict limits and validation to entries!
+        # 🚀 POGI UPDATE: Modern UI Inputs!
         self.fname_entry = self.create_box(grid_frame, "First Name", 0, 0, limit=50, no_num=True)
         self.mname_entry = self.create_box(grid_frame, "Middle Name", 0, 1, limit=50, no_num=True)
         self.lname_entry = self.create_box(grid_frame, "Last Name", 1, 0, limit=50, no_num=True)
-
-        # THE FIX: Strictly limit to 11 digits max!
         self.contact_entry = self.create_box(grid_frame, "Contact No. (11 digits)", 1, 1, limit=11, num_only=True)
-
         self.pos_entry = self.create_box(grid_frame, "Position", 2, 0, limit=50)
         self.emp_id_entry = self.create_box(grid_frame, "Employee ID (Nums Only)", 2, 1, limit=20, num_only=True)
 
-        self.addr_entry = self.create_full_width_box(self.step1_frame, "Address (Unit No. /Subdivision/Village/Purok)",
-                                                     limit=100)
+        self.addr_entry = self.create_full_width_box(self.step1_frame, "Address (Unit No. /Subdivision/Purok)", limit=100)
 
-        # --- NEW: RFID FIELD ---
-        ctk.CTkLabel(self.step1_frame, text="Tap RFID Card Here:", font=(self.ui_font, 12, "bold"),
-                     text_color="gray").pack(pady=(10, 0))
+        ctk.CTkLabel(self.step1_frame, text="Tap RFID Card Here:", font=(self.ui_font, 12, "bold"), text_color="gray").pack(pady=(10, 0), anchor="w", padx=40)
         self.rfid_entry = self.create_full_width_box(self.step1_frame, "Click box & Tap Card...", limit=30)
 
-        # --- PASSWORD SECTION ---
         self.pass_entry = self.create_full_width_box(self.step1_frame, "Create Password", is_pass=True, limit=50)
+        
         self.criteria_frame = ctk.CTkFrame(self.step1_frame, fg_color="white")
         self.criteria_frame.pack(pady=(0, 10))
-
-        self.lbl_len = self.create_criteria_label(self.criteria_frame, "• 8+ Characters", 0, 0)
+        self.lbl_len = self.create_criteria_label(self.criteria_frame, "• 8+ Chars", 0, 0)
         self.lbl_upper = self.create_criteria_label(self.criteria_frame, "• Uppercase", 0, 1)
         self.lbl_lower = self.create_criteria_label(self.criteria_frame, "• Lowercase", 0, 2)
         self.lbl_num = self.create_criteria_label(self.criteria_frame, "• Number", 1, 0)
         self.lbl_spec = self.create_criteria_label(self.criteria_frame, "• Special Char", 1, 1)
-
         self.pass_entry.bind("<KeyRelease>", self.check_password_strength)
 
         self.c_pass_entry = self.create_full_width_box(self.step1_frame, "Confirm Password", is_pass=True, limit=50)
 
         self.create_upload_box(self.step1_frame)
 
-        next_btn = ctk.CTkButton(self.step1_frame, text="NEXT STEP ➡", width=200, height=45,
+        next_btn = ctk.CTkButton(self.step1_frame, text="NEXT STEP ➡", width=250, height=45, corner_radius=8,
                                  fg_color=self.color_orange, hover_color="#C67B1D",
                                  font=(self.ui_font, 14, "bold"), command=self.go_to_step_2)
         next_btn.pack(pady=(20, 40))
 
+    # --- UI Helpers for Step 1 ---
+    def create_box(self, parent, placeholder, r, c, limit=50, num_only=False, no_num=False):
+        container = ctk.CTkFrame(parent, height=45, fg_color="#F8F9FA", border_width=1, border_color="#E0E0E0", corner_radius=8)
+        container.grid(row=r, column=c, padx=5, pady=8, sticky="nsew")
+        container.pack_propagate(False)
+        
+        entry = ctk.CTkEntry(container, border_width=0, fg_color="transparent", text_color="black",
+                             placeholder_text=placeholder, placeholder_text_color="gray", font=(self.ui_font, 12))
+        entry.pack(fill="both", expand=True, padx=10, pady=5)
+        entry.bind("<KeyRelease>", lambda e: self.limit_input(entry, limit, num_only, no_num))
+        return entry
+
+    def create_full_width_box(self, parent, placeholder, is_pass=False, limit=50):
+        container = ctk.CTkFrame(parent, height=45, width=440, fg_color="#F8F9FA", border_width=1, border_color="#E0E0E0", corner_radius=8)
+        container.pack(pady=8, padx=40)
+        container.pack_propagate(False)
+        
+        entry = ctk.CTkEntry(container, border_width=0, fg_color="transparent", text_color="black",
+                             placeholder_text=placeholder, placeholder_text_color="gray", font=(self.ui_font, 12))
+        if is_pass: entry.configure(show="*")
+        entry.pack(fill="both", expand=True, padx=10, pady=5)
+        entry.bind("<KeyRelease>", lambda e: self.limit_input(entry, limit, False, False))
+        return entry
+
+    def create_upload_box(self, parent):
+        self.upload_btn = ctk.CTkButton(parent, text="📸 Upload Profile Picture (JPG/PNG)",
+                                        width=440, height=50, fg_color="transparent", corner_radius=8,
+                                        border_width=1, border_color="#D0D0D0", text_color="gray",
+                                        font=(self.ui_font, 12), hover_color="#F0F0F0",
+                                        command=self.select_file)
+        self.upload_btn.pack(pady=10, padx=40)
+        self.selected_file_path = None
+
     def create_criteria_label(self, parent, text, r, c):
-        lbl = ctk.CTkLabel(parent, text=text, font=(self.ui_font, 10), text_color=self.color_red)
+        lbl = ctk.CTkLabel(parent, text=text, font=(self.ui_font, 11), text_color=self.color_red)
         lbl.grid(row=r, column=c, padx=10, sticky="w")
         return lbl
 
+    # =========================================================================
+    # 🚀 THE POGI FIX: STEP 2 CAROUSEL (SLIDER)
+    # =========================================================================
+    def build_step_2(self):
+        title_frame = ctk.CTkFrame(self.step2_frame, fg_color="transparent")
+        title_frame.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(title_frame, text="SECURITY SETUP", font=(self.header_font, 26, "bold"), text_color=self.color_orange).pack()
+        ctk.CTkLabel(title_frame, text="Step 2 of 2: Security Questions", font=(self.ui_font, 12), text_color="gray").pack()
+
+        self.q_list = ["What is your mother's maiden name?", "What was the name of your first pet?",
+                       "What city were you born in?", "What is your favorite food?",
+                       "What is the name of your elementary school?"]
+
+        # Container for sliding questions (Fixed Size)
+        self.carousel_container = ctk.CTkFrame(self.step2_frame, width=440, height=180, fg_color="transparent")
+        self.carousel_container.pack(pady=20, padx=40)
+        self.carousel_container.pack_propagate(False)
+
+        # Create all 3 Frames but don't pack them yet
+        self.q1_frame = ctk.CTkFrame(self.carousel_container, fg_color="transparent", width=440, height=180)
+        self.q2_frame = ctk.CTkFrame(self.carousel_container, fg_color="transparent", width=440, height=180)
+        self.q3_frame = ctk.CTkFrame(self.carousel_container, fg_color="transparent", width=440, height=180)
+
+        self.frames = [self.q1_frame, self.q2_frame, self.q3_frame]
+        self.current_q_index = 0
+
+        self.q1_var, self.q1_menu, self.ans1_entry = self.create_security_group(self.q1_frame, "Question 1", self.q_list[0])
+        self.q2_var, self.q2_menu, self.ans2_entry = self.create_security_group(self.q2_frame, "Question 2", self.q_list[1])
+        self.q3_var, self.q3_menu, self.ans3_entry = self.create_security_group(self.q3_frame, "Question 3", self.q_list[2])
+
+        # Initially place the first frame
+        self.q1_frame.place(x=0, y=0)
+        self.update_security_dropdowns()
+
+        # --- CAROUSEL CONTROLS ---
+        self.controls_frame = ctk.CTkFrame(self.step2_frame, fg_color="transparent")
+        self.controls_frame.pack(fill="x", padx=60, pady=10)
+
+        self.btn_prev_q = ctk.CTkButton(self.controls_frame, text="◀ Back", width=80, fg_color="transparent", text_color=self.color_orange, font=("Arial", 14, "bold"), hover_color="#F0F0F0", command=self.slide_prev)
+        self.btn_prev_q.pack(side="left")
+
+        self.dots_label = ctk.CTkLabel(self.controls_frame, text="● ○ ○", font=("Arial", 20), text_color=self.color_orange)
+        self.dots_label.pack(side="left", expand=True)
+
+        self.btn_next_q = ctk.CTkButton(self.controls_frame, text="Next ▶", width=80, fg_color="transparent", text_color=self.color_orange, font=("Arial", 14, "bold"), hover_color="#F0F0F0", command=self.slide_next)
+        self.btn_next_q.pack(side="right")
+
+        # --- TERMS AND REGISTER (Hidden on Q1 & Q2) ---
+        self.terms_frame = ctk.CTkFrame(self.step2_frame, fg_color="transparent")
+        
+        self.terms_var = ctk.BooleanVar(value=False)
+        self.terms_chk = ctk.CTkCheckBox(self.terms_frame, text="I accept the Terms of Agreement",
+                                         variable=self.terms_var, text_color=self.text_dark,
+                                         font=(self.ui_font, 12, "bold", "underline"),
+                                         fg_color=self.color_orange, hover_color="#C67B1D",
+                                         command=self.click_terms_checkbox)
+        self.terms_chk.pack(pady=(10, 20))
+
+        self.reg_btn = ctk.CTkButton(self.terms_frame, text="REGISTER NOW", width=250, height=45, corner_radius=8,
+                                     fg_color=self.color_green, hover_color="#1E8449",
+                                     font=(self.ui_font, 14, "bold"), command=self.handle_register)
+        self.reg_btn.pack()
+
+        self.update_carousel_ui()
+
+    def create_security_group(self, parent, label_text, default_val):
+        parent.pack_propagate(False)
+        ctk.CTkLabel(parent, text=label_text, font=(self.ui_font, 14, "bold"), text_color=self.text_dark).pack(anchor="center", pady=(10, 10))
+
+        var = ctk.StringVar(value=default_val)
+        
+        # Match modern combo box
+        menu = ctk.CTkOptionMenu(parent, variable=var, values=self.q_list, fg_color="#F8F9FA", text_color="black",
+                                 button_color="#E0E0E0", button_hover_color="#D0D0D0", font=(self.ui_font, 12), corner_radius=8, height=40,
+                                 command=self.update_security_dropdowns)
+        menu.pack(fill="x", padx=10, pady=(0, 15))
+
+        ans_entry = ctk.CTkEntry(parent, height=45, border_width=1, border_color="#E0E0E0", corner_radius=8,
+                                 fg_color="#F8F9FA", text_color="black", font=(self.ui_font, 12), placeholder_text="Enter your answer...")
+        ans_entry.pack(fill="x", padx=10)
+        ans_entry.bind("<KeyRelease>", lambda e: self.limit_input(ans_entry, 100, False, False))
+
+        return var, menu, ans_entry
+
+    def update_security_dropdowns(self, *args):
+        s1, s2, s3 = self.q1_var.get(), self.q2_var.get(), self.q3_var.get()
+        l1 = [q for q in self.q_list if q == s1 or (q != s2 and q != s3)]
+        l2 = [q for q in self.q_list if q == s2 or (q != s1 and q != s3)]
+        l3 = [q for q in self.q_list if q == s3 or (q != s1 and q != s2)]
+        self.q1_menu.configure(values=l1); self.q2_menu.configure(values=l2); self.q3_menu.configure(values=l3)
+
+    # ==========================================
+    # 🏃 THE ANIMATION LOGIC (SLIDER)
+    # ==========================================
+    def slide_next(self):
+        if self.current_q_index < 2:
+            # Check answer before moving
+            entries = [self.ans1_entry, self.ans2_entry, self.ans3_entry]
+            if not entries[self.current_q_index].get().strip():
+                messagebox.showwarning("Warning", "Please answer the current question first.")
+                return
+
+            self.animate_slide(self.frames[self.current_q_index], self.frames[self.current_q_index + 1], "left")
+            self.current_q_index += 1
+            self.update_carousel_ui()
+
+    def slide_prev(self):
+        if self.current_q_index > 0:
+            self.animate_slide(self.frames[self.current_q_index], self.frames[self.current_q_index - 1], "right")
+            self.current_q_index -= 1
+            self.update_carousel_ui()
+
+    def animate_slide(self, frame_out, frame_in, direction):
+        width = 440
+        speed = 40  # pixels per frame
+        steps = width // speed
+
+        start_x_in = width if direction == "left" else -width
+        end_x_out = -width if direction == "left" else width
+
+        frame_in.place(x=start_x_in, y=0)
+        frame_in.lift()
+
+        def step(current_step):
+            if current_step <= steps:
+                progress = current_step / steps
+                frame_out.place(x=int(end_x_out * progress), y=0)
+                frame_in.place(x=int(start_x_in * (1 - progress)), y=0)
+                self.window.after(10, step, current_step + 1)
+            else:
+                frame_out.place_forget()
+                frame_in.place(x=0, y=0)
+
+        step(1)
+
+    def update_carousel_ui(self):
+        dots = ["○", "○", "○"]
+        dots[self.current_q_index] = "●"
+        self.dots_label.configure(text=" ".join(dots))
+
+        # Show/Hide Back Button
+        if self.current_q_index == 0:
+            self.btn_prev_q.pack_forget()
+        else:
+            self.btn_prev_q.pack(side="left")
+
+        # Show/Hide Next Button and Terms Frame
+        if self.current_q_index == 2:
+            self.btn_next_q.pack_forget()
+            self.terms_frame.pack(fill="x", pady=20)
+        else:
+            self.btn_next_q.pack(side="right")
+            self.terms_frame.pack_forget()
+
+    # =========================================================================
+    # OTHER LOGICS (Password, Image, Terms, Register)
+    # =========================================================================
     def check_password_strength(self, event):
         pwd = self.pass_entry.get()
-
-        if len(pwd) >= 8:
-            self.lbl_len.configure(text_color=self.color_green)
-        else:
-            self.lbl_len.configure(text_color=self.color_red)
-
-        if re.search(r"[A-Z]", pwd):
-            self.lbl_upper.configure(text_color=self.color_green)
-        else:
-            self.lbl_upper.configure(text_color=self.color_red)
-
-        if re.search(r"[a-z]", pwd):
-            self.lbl_lower.configure(text_color=self.color_green)
-        else:
-            self.lbl_lower.configure(text_color=self.color_red)
-
-        if re.search(r"\d", pwd):
-            self.lbl_num.configure(text_color=self.color_green)
-        else:
-            self.lbl_num.configure(text_color=self.color_red)
-
-        if re.search(r"[!@#$%^&*(),.?\":{}|<>]", pwd):
-            self.lbl_spec.configure(text_color=self.color_green)
-        else:
-            self.lbl_spec.configure(text_color=self.color_red)
+        self.lbl_len.configure(text_color=self.color_green if len(pwd) >= 8 else self.color_red)
+        self.lbl_upper.configure(text_color=self.color_green if re.search(r"[A-Z]", pwd) else self.color_red)
+        self.lbl_lower.configure(text_color=self.color_green if re.search(r"[a-z]", pwd) else self.color_red)
+        self.lbl_num.configure(text_color=self.color_green if re.search(r"\d", pwd) else self.color_red)
+        self.lbl_spec.configure(text_color=self.color_green if re.search(r"[!@#$%^&*(),.?\":{}|<>]", pwd) else self.color_red)
 
     def is_password_valid(self):
         pwd = self.pass_entry.get()
         return (len(pwd) >= 8 and re.search(r"[A-Z]", pwd) and re.search(r"[a-z]", pwd) and
                 re.search(r"\d", pwd) and re.search(r"[!@#$%^&*(),.?\":{}|<>]", pwd))
 
-    # =========================================================================
-    # STEP 2: SECURITY QUESTIONS & TERMS
-    # =========================================================================
-    def build_step_2(self):
-        title_frame = ctk.CTkFrame(self.step2_frame, fg_color="transparent")
-        title_frame.pack(fill="x", pady=(20, 10))
-        ctk.CTkLabel(title_frame, text="SECURITY & TERMS", font=(self.header_font, 24, "bold"),
-                     text_color=self.color_orange).pack()
-        ctk.CTkLabel(title_frame, text="Step 2 of 2: Finalize Account", font=(self.ui_font, 12),
-                     text_color="gray").pack()
-
-        content_frame = ctk.CTkFrame(self.step2_frame, fg_color="white")
-        content_frame.pack(padx=30, fill="x", pady=10)
-
-        self.q_list = ["What is your mother's maiden name?", "What was the name of your first pet?",
-                       "What city were you born in?", "What is your favorite food?",
-                       "What is the name of your elementary school?"]
-
-        self.q1_var, self.q1_menu, self.ans1_entry = self.create_security_group(content_frame, "Question 1",
-                                                                                self.q_list[0])
-        self.q2_var, self.q2_menu, self.ans2_entry = self.create_security_group(content_frame, "Question 2",
-                                                                                self.q_list[1])
-        self.q3_var, self.q3_menu, self.ans3_entry = self.create_security_group(content_frame, "Question 3",
-                                                                                self.q_list[2])
-
-        self.update_security_dropdowns()
-
-        self.terms_var = ctk.BooleanVar(value=False)
-        self.terms_chk = ctk.CTkCheckBox(self.step2_frame, text="I accept the Terms of Agreement",
-                                         variable=self.terms_var, text_color=self.color_orange,
-                                         font=(self.ui_font, 12, "bold", "underline"),
-                                         fg_color=self.color_orange, hover_color="#C67B1D",
-                                         command=self.click_terms_checkbox)
-        self.terms_chk.pack(pady=20, anchor="w", padx=40)
-
-        reg_btn = ctk.CTkButton(self.step2_frame, text="REGISTER", width=200, height=45,
-                                fg_color=self.color_orange, hover_color="#C67B1D",
-                                font=(self.ui_font, 14, "bold"), command=self.handle_register)
-        reg_btn.pack(pady=(0, 40))
-
-    # --- Smart Dropdown Logic ---
-    def update_security_dropdowns(self, *args):
-        s1 = self.q1_var.get()
-        s2 = self.q2_var.get()
-        s3 = self.q3_var.get()
-
-        l1 = [q for q in self.q_list if q == s1 or (q != s2 and q != s3)]
-        l2 = [q for q in self.q_list if q == s2 or (q != s1 and q != s3)]
-        l3 = [q for q in self.q_list if q == s3 or (q != s1 and q != s2)]
-
-        self.q1_menu.configure(values=l1)
-        self.q2_menu.configure(values=l2)
-        self.q3_menu.configure(values=l3)
-
-    # --- HELPERS (THE PLACEHOLDER COLOR FIX) ---
-    def create_box(self, parent, placeholder, r, c, limit=50, num_only=False, no_num=False):
-        entry = ctk.CTkEntry(parent, width=210, height=40, border_width=2, border_color="black",
-                             fg_color="white", text_color="black",
-                             placeholder_text=placeholder,
-                             placeholder_text_color="gray",
-                             font=(self.ui_font, 12), corner_radius=0)
-        entry.grid(row=r, column=c, padx=5, pady=10)
-
-        entry.bind("<KeyRelease>", lambda e: self.limit_input(entry, limit, num_only, no_num))
-        return entry
-
-    def create_full_width_box(self, parent, placeholder, is_pass=False, limit=50):
-        entry = ctk.CTkEntry(parent, width=440, height=40, border_width=2, border_color="black",
-                             fg_color="white", text_color="black",
-                             placeholder_text=placeholder,
-                             placeholder_text_color="gray",
-                             font=(self.ui_font, 12), corner_radius=0)
-        if is_pass:
-            entry.configure(show="*")
-        entry.pack(pady=10)
-
-        entry.bind("<KeyRelease>", lambda e: self.limit_input(entry, limit, False, False))
-        return entry
-
-    def create_upload_box(self, parent):
-        self.upload_btn = ctk.CTkButton(parent, text="📸\nUpload 1x1 Profile Picture (JPG/PNG)",
-                                        width=440, height=80, fg_color="transparent",
-                                        border_width=2, border_color="black", text_color="gray",
-                                        font=(self.ui_font, 12), hover_color="#F9F9F9",
-                                        command=self.select_file)
-        self.upload_btn.pack(pady=10)
-        self.selected_file_path = None
-
-    def create_security_group(self, parent, label_text, default_val):
-        ctk.CTkLabel(parent, text=label_text, font=(self.ui_font, 12, "bold"), text_color="black").pack(anchor="w",
-                                                                                                        pady=(10, 2))
-
-        var = ctk.StringVar(value=default_val)
-        wrapper = ctk.CTkFrame(parent, fg_color="white", border_width=2, border_color="black")
-        wrapper.pack(fill="x", pady=(0, 5))
-
-        menu = ctk.CTkOptionMenu(wrapper, variable=var, values=self.q_list, fg_color="white", text_color="black",
-                                 button_color="white", button_hover_color="#EEE", dropdown_fg_color="white",
-                                 dropdown_text_color="black", font=(self.ui_font, 12), corner_radius=0,
-                                 command=self.update_security_dropdowns)
-        menu.pack(fill="x", padx=2, pady=2)
-
-        ctk.CTkLabel(parent, text="Answer", font=(self.ui_font, 11), text_color="gray").pack(anchor="w")
-
-        ans_entry = ctk.CTkEntry(parent, height=35, border_width=1, border_color="gray",
-                                 fg_color="#F9F9F9", text_color="black", font=(self.ui_font, 12))
-        ans_entry.pack(fill="x", pady=(0, 10))
-        ans_entry.bind("<KeyRelease>", lambda e: self.limit_input(ans_entry, 100, False, False))
-
-        return var, menu, ans_entry
-
-    # =========================================================================
-    # 📸 NEW: IMAGE UPLOADER LOGIC
-    # =========================================================================
     def select_file(self):
-        filename = filedialog.askopenfilename(title="Select 1x1 Profile Picture",
-                                              filetypes=[("Image Files", "*.jpg;*.png;*.jpeg")])
+        filename = filedialog.askopenfilename(title="Select 1x1 Profile Picture", filetypes=[("Image Files", "*.jpg;*.png;*.jpeg")])
         if filename:
             self.selected_file_path = filename
             short_name = os.path.basename(filename)
-            self.upload_btn.configure(text=f"✅ Image Selected:\n{short_name}", text_color="green", border_color="green")
+            self.upload_btn.configure(text=f"✅ Image Selected: {short_name}", text_color=self.color_green, border_color=self.color_green)
 
     def process_and_save_image(self):
-        """Kukunin ang in-upload na picture at i-sa-save sa internal folder natin"""
-        if not self.selected_file_path:
-            return None  # Kung walang piniling picture, return none lang (gagamitin yung emoji sa dashbaord)
-
+        if not self.selected_file_path: return None
         try:
-            # Gagawa tayo ng 'assets/profiles' folder kung wala pa
-            project_dir = os.path.dirname(os.path.realpath(__file__))
-            profile_dir = os.path.join(project_dir, "assets", "profiles")
-            if not os.path.exists(profile_dir):
-                os.makedirs(profile_dir)
-
-            # Ang pangalan ng picture ay Employee ID para hindi mag-clash
-            ext = os.path.splitext(self.selected_file_path)[1]
-            new_filename = f"emp_{self.emp_id_entry.get()}{ext}"
+            profile_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "assets", "profiles")
+            if not os.path.exists(profile_dir): os.makedirs(profile_dir)
+            new_filename = f"emp_{self.emp_id_entry.get()}{os.path.splitext(self.selected_file_path)[1]}"
             new_filepath = os.path.join(profile_dir, new_filename)
-
-            # I-copy yung file mula sa PC ni user papunta sa folder ng system natin
             shutil.copy2(self.selected_file_path, new_filepath)
-
-            # Gumamit tayo ng forward slashes (/) para hindi mag-error sa SQL parsing mamaya
             return new_filepath.replace("\\", "/")
-
         except Exception as e:
             print(f"Failed to process image: {e}")
             return None
 
-    # --- NAVIGATION & TERMS ---
     def handle_back(self):
         if self.current_step == 2:
             self.go_to_step_1()
@@ -357,31 +379,22 @@ class SignupWindow:
         if not self.fname_entry.get() or not self.lname_entry.get() or not self.pass_entry.get():
             messagebox.showerror("Missing Info", "Please fill in all required fields.")
             return
-
-        contact = self.contact_entry.get()
-        if len(contact) != 11:
+        if len(self.contact_entry.get()) != 11:
             messagebox.showerror("Invalid Contact", "Contact number must be EXACTLY 11 digits.")
             return
-
-        emp_id = self.emp_id_entry.get()
-        if not emp_id.isdigit():
+        if not self.emp_id_entry.get().isdigit():
             messagebox.showerror("Invalid ID", "Employee ID must contain numbers only.")
             return
-
         if not self.is_password_valid():
             messagebox.showerror("Weak Password", "Password does not meet the requirements.")
             return
-
         if self.pass_entry.get() != self.c_pass_entry.get():
             messagebox.showerror("Password Error", "Passwords do not match.")
             return
 
-        # Warning kapag walang picture
         if not self.selected_file_path:
-            proceed = messagebox.askyesno("No Profile Picture",
-                                          "You haven't uploaded a 1x1 profile picture.\nA default avatar will be used. Do you want to proceed?")
-            if not proceed:
-                return
+            proceed = messagebox.askyesno("No Profile Picture", "You haven't uploaded a 1x1 profile picture.\nA default avatar will be used. Do you want to proceed?")
+            if not proceed: return
 
         self.step1_frame.pack_forget()
         self.step2_frame.pack(fill="both", expand=True)
@@ -405,10 +418,9 @@ class SignupWindow:
         t_window.geometry("600x600")
         t_window.transient(self.window)
         t_window.grab_set()
-        sw = t_window.winfo_screenwidth()
-        sh = t_window.winfo_screenheight()
-        x = int((sw / 2) - (600 / 2))
-        y = int((sh / 2) - (600 / 2))
+        
+        x = int((t_window.winfo_screenwidth() / 2) - (600 / 2))
+        y = int((t_window.winfo_screenheight() / 2) - (600 / 2))
         t_window.geometry(f"+{x}+{y}")
         t_window.configure(fg_color="white")
 
@@ -416,64 +428,42 @@ class SignupWindow:
         main_frame.pack(fill="both", expand=True)
         top_frame = ctk.CTkFrame(main_frame, fg_color="white")
         top_frame.pack(fill="x", pady=10)
-        ctk.CTkLabel(top_frame, text="TERMS & CONDITIONS", font=(self.header_font, 22, "bold"),
-                     text_color=self.color_orange).pack(pady=10)
+        ctk.CTkLabel(top_frame, text="TERMS & CONDITIONS", font=(self.header_font, 22, "bold"), text_color=self.color_orange).pack(pady=10)
+        
         scroll_txt = ctk.CTkScrollableFrame(main_frame, width=520, height=400, fg_color="white")
         scroll_txt.pack(pady=10)
 
-        self.add_term_section(scroll_txt, "1. ACCEPTANCE OF TERMS",
-                              "By accessing and using the Barangay Incident and Complaint System (BIRCS), authorized barangay personnel agree to comply with these Terms and Conditions governing the proper use and management of the system.")
+        self.add_term_section(scroll_txt, "1. ACCEPTANCE OF TERMS", "By accessing and using the Barangay Incident and Complaint System (BIRCS), authorized barangay personnel agree to comply with these Terms and Conditions governing the proper use and management of the system.")
         self.add_term_section(scroll_txt, "2. AUTHORIZED ACCESS", "")
-        self.add_term_sub(scroll_txt, "2.1 System Access",
-                          "Only authorized barangay officials and designated personnel are allowed to access and operate the BIRCS.")
-        self.add_term_sub(scroll_txt, "2.2 Account Responsibility",
-                          "Users are responsible for maintaining the confidentiality of their login credentials. Sharing of accounts is strictly prohibited.")
-        self.add_term_sub(scroll_txt, "2.3 Unauthorized Use",
-                          "Unauthorized access, misuse, or attempted manipulation of system data is strictly prohibited and subject to disciplinary action.")
-        self.add_term_section(scroll_txt, "3. DATA ENTRY AND MANAGEMENT", "")
-        self.add_term_sub(scroll_txt, "3.1 Accurate Data Recording",
-                          "Personnel must ensure that all incident and complaint records entered into the system are accurate, complete, and truthful.")
-        self.add_term_section(scroll_txt, "7. INCIDENT AND COMPLAINT HANDLING RESPONSIBILITY",
-                              "By accessing and using the Barangay Incident and Complaint System (BIRCS), authorized barangay personnel agree to comply with these Terms and Conditions governing the proper use and management of the system.")
-        self.add_term_section(scroll_txt, "8. SYSTEM MAINTENANCE AND UPDATES",
-                              "The barangay administration reserves the right to update, maintain, or temporarily restrict system access for maintenance purposes.")
-        self.add_term_section(scroll_txt, "9. VIOLATIONS AND SANCTIONS",
-                              "Improper use of the system, data tampering, or breach of confidentiality may result in disciplinary action in accordance with barangay policies.")
-        self.add_term_section(scroll_txt, "10. AMENDMENTS",
-                              "These terms may be revised as necessary, and authorized users will be informed of updates.")
+        self.add_term_sub(scroll_txt, "2.1 System Access", "Only authorized barangay officials and designated personnel are allowed to access and operate the BIRCS.")
+        self.add_term_sub(scroll_txt, "2.2 Account Responsibility", "Users are responsible for maintaining the confidentiality of their login credentials. Sharing of accounts is strictly prohibited.")
+        self.add_term_sub(scroll_txt, "2.3 Unauthorized Use", "Unauthorized access, misuse, or attempted manipulation of system data is strictly prohibited and subject to disciplinary action.")
 
         btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         btn_frame.pack(side="bottom", pady=20)
-        ctk.CTkButton(btn_frame, text="Close", fg_color=self.color_gray_btn, command=t_window.destroy).pack(side="left",
-                                                                                                            padx=10)
-        ctk.CTkButton(btn_frame, text="I Accept These Terms", fg_color=self.color_orange,
-                      command=lambda: self.accept_terms(t_window)).pack(side="left", padx=10)
+        ctk.CTkButton(btn_frame, text="Close", fg_color=self.color_gray_btn, command=t_window.destroy).pack(side="left", padx=10)
+        ctk.CTkButton(btn_frame, text="I Accept These Terms", fg_color=self.color_orange, command=lambda: self.accept_terms(t_window)).pack(side="left", padx=10)
 
     def add_term_section(self, parent, title, text):
-        ctk.CTkLabel(parent, text=title, font=(self.header_font, 14, "bold"), text_color=self.color_orange,
-                     anchor="w").pack(fill="x", pady=(10, 2))
-        if text: ctk.CTkLabel(parent, text=text, font=(self.ui_font, 12), text_color="#555", justify="left",
-                              wraplength=480, anchor="w").pack(fill="x")
+        ctk.CTkLabel(parent, text=title, font=(self.header_font, 14, "bold"), text_color=self.color_orange, anchor="w").pack(fill="x", pady=(10, 2))
+        if text: ctk.CTkLabel(parent, text=text, font=(self.ui_font, 12), text_color="#555", justify="left", wraplength=480, anchor="w").pack(fill="x")
 
     def add_term_sub(self, parent, title, text):
-        ctk.CTkLabel(parent, text=title, font=(self.header_font, 12, "bold"), text_color=self.color_orange,
-                     anchor="w").pack(fill="x", pady=(5, 0), padx=(20, 0))
-        ctk.CTkLabel(parent, text=text, font=(self.ui_font, 12), text_color="#555", justify="left", wraplength=460,
-                     anchor="w").pack(fill="x", padx=(20, 0))
+        ctk.CTkLabel(parent, text=title, font=(self.header_font, 12, "bold"), text_color=self.text_dark, anchor="w").pack(fill="x", pady=(5, 0), padx=(20, 0))
+        ctk.CTkLabel(parent, text=text, font=(self.ui_font, 12), text_color="#555", justify="left", wraplength=460, anchor="w").pack(fill="x", padx=(20, 0))
 
     def accept_terms(self, modal):
         self.terms_var.set(True)
         modal.destroy()
 
     def handle_register(self):
-        if not self.ans1_entry.get() or not self.ans2_entry.get() or not self.ans3_entry.get():
-            messagebox.showerror("Error", "Please answer all 3 security questions.")
+        if not self.ans3_entry.get():
+            messagebox.showerror("Error", "Please answer the current question first.")
             return
         if not self.terms_var.get():
             messagebox.showerror("Error", "You must accept the Terms & Conditions.")
             return
 
-        # 🛑 HETO NA YUNG MAGIC NG IMAGE!
         saved_image_path = self.process_and_save_image()
 
         data = {
@@ -485,7 +475,6 @@ class SignupWindow:
             "q1": self.q1_var.get(), "a1": self.ans1_entry.get(),
             "q2": self.q2_var.get(), "a2": self.ans2_entry.get(),
             "q3": self.q3_var.get(), "a3": self.ans3_entry.get(),
-            # Pinasa natin 'yung path papunta sa Data dictionary para makuha ng engine!
             "profile_pic": saved_image_path
         }
 
