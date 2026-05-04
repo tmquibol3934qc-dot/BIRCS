@@ -1,6 +1,8 @@
 import customtkinter as ctk
 from tkinter import messagebox
 from datetime import datetime
+import os
+from PIL import Image
 
 # THE NEW CLEAN IMPORTS!
 from .overview_page import OverviewPage
@@ -57,7 +59,30 @@ class DashboardWindow:
 
         logo_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
         logo_frame.pack(pady=(30, 20), padx=20, fill="x")
-        ctk.CTkLabel(logo_frame, text="BICRS", font=("Arial", 28, "bold"), text_color="#F1C40F").pack(anchor="center")
+
+        # 🚀 POGI UPDATE: Logo Integration!
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            logo_path = os.path.join(current_dir, 'logo.jpg')
+
+            if not os.path.exists(logo_path):
+                logo_path = os.path.join(current_dir, 'assets', 'logo.jpg')
+
+            if os.path.exists(logo_path):
+                logo_img = Image.open(logo_path)
+                ctk_logo = ctk.CTkImage(light_image=logo_img, dark_image=logo_img, size=(80, 80))
+
+                logo_label = ctk.CTkLabel(logo_frame, text="", image=ctk_logo)
+                logo_label.pack(anchor="center", pady=(0, 5))
+            else:
+                ctk.CTkLabel(logo_frame, text="BICRS", font=("Arial", 28, "bold"), text_color="#F1C40F").pack(
+                    anchor="center")
+
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+            ctk.CTkLabel(logo_frame, text="BICRS", font=("Arial", 28, "bold"), text_color="#F1C40F").pack(
+                anchor="center")
+
         ctk.CTkLabel(logo_frame, text="Brgy. 176-B Bagong Silang", font=("Arial", 11), text_color="#BDC3C7").pack(
             anchor="center")
 
@@ -69,7 +94,6 @@ class DashboardWindow:
         self.nav_buttons["dashboard"] = self.create_nav_btn(sidebar, "📁 Dashboard", self.show_overview_page)
         self.nav_buttons["blotter"] = self.create_nav_btn(sidebar, "📄 Incident Blotter", self.show_blotter_page)
         self.nav_buttons["resolution"] = self.create_nav_btn(sidebar, "⚖️ Resolution", self.show_resolution_page)
-        self.nav_buttons["analytics"] = self.create_nav_btn(sidebar, "📊 Analytics", self.show_analytics_page)
 
     def create_nav_btn(self, parent, text, command=None):
         btn = ctk.CTkButton(parent, text=f"  {text}", fg_color="transparent", text_color="white", hover_color="#2C3E50",
@@ -95,9 +119,6 @@ class DashboardWindow:
 
     # --- PROFILE PANEL ---
     def create_profile_panel(self):
-        import os
-        from PIL import Image
-
         # 1. KUNIN ANG IMAGE PATH SA DATABASE
         img_path = self.user.get('profile_pic', '')
         has_image = False
@@ -124,26 +145,23 @@ class DashboardWindow:
         )
         self.profile_btn.place(relx=0.98, rely=0.02, anchor="ne")
 
-        # 3. ANG DROP-DOWN PANEL (The Fix!)
+        # 3. ANG DROP-DOWN PANEL
         self.account_panel = ctk.CTkFrame(self.window, width=250, corner_radius=10, fg_color="white", border_width=1,
                                           border_color="#E0E0E0")
         self.panel_visible = False
 
-        # THE FIX: Dark Blue Header na may kasamang Picture sa loob!
         header_frame = ctk.CTkFrame(self.account_panel, fg_color=self.sidebar_color, corner_radius=0)
         header_frame.pack(fill="x")
 
         ctk.CTkLabel(header_frame, text="Account Information", font=("Arial", 12, "bold"), text_color="white").pack(
             pady=(10, 5))
 
-        # Dito lalabas yung picture sa LOOB ng blue box
         pic_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
         pic_frame.pack(pady=(0, 20))
 
         if has_image:
             ctk.CTkLabel(pic_frame, text="", image=self.panel_img).pack()
         else:
-            # Pogi Fallback: Kapag walang picture, may gray circle na may tao
             fallback = ctk.CTkFrame(pic_frame, width=80, height=80, corner_radius=40, fg_color="#E0E0E0")
             fallback.pack()
             fallback.pack_propagate(False)
@@ -185,10 +203,13 @@ class DashboardWindow:
 
     def toggle_profile_panel(self):
         if self.panel_visible:
-            self.account_panel.place_forget(); self.panel_visible = False
+            self.account_panel.place_forget();
+            self.panel_visible = False
         else:
             self.account_panel.place(relx=0.98, rely=0.08,
-                                     anchor="ne"); self.account_panel.lift(); self.panel_visible = True
+                                     anchor="ne");
+            self.account_panel.lift();
+            self.panel_visible = True
 
     def update_timer(self):
         mins = int((datetime.now() - self.login_time).total_seconds() // 60)
@@ -203,7 +224,6 @@ class DashboardWindow:
         self.set_active_tab("dashboard")
         if "dashboard" in self.page_cache: self.page_cache["dashboard"].destroy()
 
-        # TAWAGIN ANG BAGONG MODULAR CLASS NATIN!
         self.page_cache["dashboard"] = OverviewPage(self.main_frame, self.engine, self.user).container
 
     def show_blotter_page(self):
@@ -224,16 +244,6 @@ class DashboardWindow:
             self.page_cache["resolution"] = container
         self.page_cache["resolution"].pack(fill="both", expand=True)
 
-    def show_analytics_page(self):
-        self.hide_all_pages()
-        self.set_active_tab("analytics")
-        if "analytics" not in self.page_cache:
-            container = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-            ctk.CTkLabel(container, text="📊 Analytics Page (Coming Soon)", font=("Arial", 24),
-                         text_color=self.text_muted).pack(pady=100)
-            self.page_cache["analytics"] = container
-        self.page_cache["analytics"].pack(fill="both", expand=True)
-
     # --- ADMIN / LOGOUT ---
     def prompt_admin_access(self):
         scanned_rfid = ctk.CTkInputDialog(text="Scan Kapitan RFID:", title="Auth").get_input()
@@ -250,7 +260,6 @@ class DashboardWindow:
         """Ibinabalik ang Main Dashboard kapag nag-exit na si Kapitan sa Admin Panel"""
         self.window.deiconify()
         self.window.state('zoomed')
-
 
     def handle_logout(self):
         if messagebox.askyesno("Confirm Logout", "Are you sure you want to log out?"):
