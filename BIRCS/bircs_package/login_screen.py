@@ -10,10 +10,14 @@ class LoginWindow:
         self.engine = auth_engine
         self.root.overrideredirect(True)
         ctk.set_appearance_mode("light")
+
+        # Colors
         self.color_orange = "#E79124"
+        self.text_dark = "#2C3E50"
         self.header_font = "Young Serif"
         self.ui_font = "Poppins"
-        self.root.title("BIRCS Login")
+
+        self.root.title("BICRS Login")
 
         w, h = 1000, 650
 
@@ -24,11 +28,12 @@ class LoginWindow:
         self.root.geometry(f"{w}x{h}+{x}+{y}")
 
         self.load_images()
-        self.create_top_bar()
+
+        # 🚀 POGI UPDATE: Full screen background, no more blocking top bar!
         self.bg_label = ctk.CTkLabel(self.root, text="", image=self.bg_image)
         self.bg_label.pack(fill="both", expand=True)
-        self.create_login_card()
 
+        self.create_login_card()
 
     def load_images(self):
         current_path = os.path.dirname(os.path.realpath(__file__))
@@ -36,7 +41,7 @@ class LoginWindow:
             bg_path = os.path.join(current_path, "background.jpg")
             raw_img = Image.open(bg_path).convert("RGBA")
             raw_img = raw_img.resize((1000, 650))
-            overlay = Image.new("RGBA", raw_img.size, (255, 255, 255, 200))
+            overlay = Image.new("RGBA", raw_img.size, (255, 255, 255, 180))  # Slightly clearer background
             final_bg = Image.alpha_composite(raw_img, overlay)
             self.bg_image = ctk.CTkImage(light_image=final_bg, size=(1000, 650))
         except Exception:
@@ -44,83 +49,87 @@ class LoginWindow:
         try:
             logo_path = os.path.join(current_path, "logo.jpg")
             pil_logo = Image.open(logo_path)
-            self.logo_image = ctk.CTkImage(light_image=pil_logo, size=(100, 100))
+            self.logo_image = ctk.CTkImage(light_image=pil_logo, size=(90, 90))  # Saktong size lang
         except Exception:
             self.logo_image = None
 
-    def create_top_bar(self):
-        top_bar = ctk.CTkFrame(self.root, height=60, fg_color=self.color_orange, corner_radius=0)
-        top_bar.pack(side="top", fill="x")
-        logo_text = ctk.CTkLabel(top_bar, text="🏛 BIRCS", font=("Arial", 20, "bold"), text_color="white")
-        logo_text.pack(side="left", padx=20, pady=10)
-
     def create_login_card(self):
-        # Slightly shorter card since we removed the Sign Up button
-        card = ctk.CTkFrame(self.bg_label, fg_color="white", width=450, height=500, corner_radius=10)
+        # 🚀 POGI UPDATE: Modern White Card with smooth corners
+        card = ctk.CTkFrame(self.bg_label, fg_color="white", width=420, height=520, corner_radius=15)
         card.place(relx=0.5, rely=0.5, anchor="center")
         card.pack_propagate(False)
 
         back_btn = ctk.CTkButton(card, text="✕", width=30, fg_color="transparent",
-                                 text_color=self.color_orange, font=("Arial", 20, "bold"),
-                                 hover_color="#EEE", command=self.confirm_exit)
-        back_btn.place(x=10, y=10)
+                                 text_color="gray", font=("Arial", 18, "bold"),
+                                 hover_color="#F0F0F0", command=self.confirm_exit)
+        back_btn.place(x=15, y=15)
 
         if self.logo_image:
             logo_label = ctk.CTkLabel(card, text="", image=self.logo_image)
-            logo_label.pack(pady=(30, 10))
+            logo_label.pack(pady=(35, 5))
         else:
-            ctk.CTkLabel(card, text="LOGO", width=80, height=80, fg_color="#EEE").pack(pady=(40, 10))
+            ctk.CTkLabel(card, text="LOGO", width=80, height=80, fg_color="#EEE", corner_radius=40).pack(pady=(35, 5))
 
-        ctk.CTkLabel(card, text="LOG IN", font=(self.header_font, 26, "bold"), text_color=self.color_orange).pack(
-            pady=(0, 20))
+        # 🚀 POGI UPDATE: Better Greeting Typography
+        ctk.CTkLabel(card, text="Welcome Back!", font=(self.header_font, 24, "bold"), text_color=self.text_dark).pack(
+            pady=(5, 0))
+        ctk.CTkLabel(card, text="Please sign in to continue", font=(self.ui_font, 12), text_color="gray").pack(
+            pady=(0, 25))
 
-        self.user_entry = self.create_input_field(card, "Enter ID or tap RFID", icon="👤")
+        # Modern Inputs
+        self.user_entry = self.create_input_field(card, "Employee ID or tap RFID", icon="👤")
         self.user_entry.bind('<Return>', lambda event: self.handle_login())
 
         self.pass_entry, self.eye_btn = self.create_password_field(card, "Enter your password")
         self.pass_entry.bind('<Return>', lambda event: self.handle_login())
 
-        # ==========================================
-        # THE FIX: Goodbye "Remember Me" checkbox!
-        # ==========================================
-        opts_frame = ctk.CTkFrame(card, fg_color="white")
-        opts_frame.pack(pady=(5, 20), padx=40, fill="x")
+        # Forgot Password Section
+        opts_frame = ctk.CTkFrame(card, fg_color="transparent")
+        opts_frame.pack(fill="x", padx=40, pady=(5, 25))
 
         forgot = ctk.CTkLabel(opts_frame, text="Forgot Password?",
                               font=(self.ui_font, 11, "bold"), text_color=self.color_orange, cursor="hand2")
         forgot.pack(side="right")
         forgot.bind("<Button-1>", lambda e: self.open_forgot_popup())
 
-        login_btn = ctk.CTkButton(card, text="LOGIN", command=self.handle_login,
-                                  width=200, height=45, corner_radius=0,
+        # Primary Login Button
+        login_btn = ctk.CTkButton(card, text="LOG IN", command=self.handle_login,
+                                  width=200, height=45, corner_radius=8,
                                   fg_color=self.color_orange, hover_color="#C67B1D",
                                   font=(self.ui_font, 14, "bold"))
-        login_btn.pack(pady=10)
+        login_btn.pack(pady=5)
 
         self.user_entry.focus_set()
 
     def create_input_field(self, parent, placeholder, icon):
-        container = ctk.CTkFrame(parent, height=50, fg_color="white", border_width=2, border_color="black",
-                                 corner_radius=0)
+        # 🚀 POGI UPDATE: Soft backgrounds and smooth borders! Bye bye rigid black borders!
+        container = ctk.CTkFrame(parent, height=45, fg_color="#F8F9FA", border_width=1, border_color="#E0E0E0",
+                                 corner_radius=8)
         container.pack(pady=(0, 15), padx=40, fill="x")
-        ctk.CTkLabel(container, text=icon, font=("Arial", 20), text_color="black", fg_color="white", width=40).pack(
-            side="left", padx=(10, 5))
-        entry = ctk.CTkEntry(container, height=30, border_width=0, fg_color="white", text_color="black",
+
+        ctk.CTkLabel(container, text=icon, font=("Arial", 16), text_color="gray", fg_color="transparent",
+                     width=40).pack(side="left", padx=(10, 5))
+
+        entry = ctk.CTkEntry(container, height=35, border_width=0, fg_color="#F8F9FA", text_color="black",
                              placeholder_text=placeholder, font=(self.ui_font, 12))
         entry.pack(side="left", fill="x", expand=True, padx=(0, 10), pady=5)
         return entry
 
     def create_password_field(self, parent, placeholder):
-        container = ctk.CTkFrame(parent, height=50, fg_color="white", border_width=2, border_color="black",
-                                 corner_radius=0)
+        container = ctk.CTkFrame(parent, height=45, fg_color="#F8F9FA", border_width=1, border_color="#E0E0E0",
+                                 corner_radius=8)
         container.pack(pady=(0, 15), padx=40, fill="x")
-        ctk.CTkLabel(container, text="🔒", font=("Arial", 18), text_color="black", fg_color="white", width=40).pack(
+
+        ctk.CTkLabel(container, text="🔒", font=("Arial", 16), text_color="gray", fg_color="transparent", width=40).pack(
             side="left", padx=(10, 5))
-        entry = ctk.CTkEntry(container, height=30, border_width=0, fg_color="white", text_color="black",
+
+        entry = ctk.CTkEntry(container, height=35, border_width=0, fg_color="#F8F9FA", text_color="black",
                              placeholder_text=placeholder, font=(self.ui_font, 12), show="*")
         entry.pack(side="left", fill="x", expand=True, pady=5)
-        eye_btn = ctk.CTkButton(container, text="👁", width=40, fg_color="white", text_color="black", hover_color="#EEE",
-                                font=("Arial", 16), command=lambda: self.toggle_password(entry, eye_btn))
+
+        eye_btn = ctk.CTkButton(container, text="👁", width=40, fg_color="transparent", text_color="gray",
+                                hover_color="#EAEAEA",
+                                font=("Arial", 14), command=lambda: self.toggle_password(entry, eye_btn))
         eye_btn.pack(side="right", padx=(5, 10), pady=5)
         return entry, eye_btn
 
@@ -144,12 +153,9 @@ class LoginWindow:
 
         if auth_result.get("success"):
             user_data = auth_result.get("user_data")
-
             role = user_data.get('role', 'Staff')
             fname = user_data.get('first_name', '')
             lname = user_data.get('last_name', '')
-
-
 
             messagebox.showinfo("Login Success", f"Welcome back, {role.title()} {fname} {lname}!")
             self.root.withdraw()
