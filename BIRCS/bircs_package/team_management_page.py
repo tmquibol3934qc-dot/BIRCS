@@ -6,7 +6,7 @@ class TeamManagementPage:
     def __init__(self, parent_frame, engine, root_window):
         self.parent = parent_frame
         self.engine = engine
-        self.root = root_window  # Kailangan natin 'to para sa Popups
+        self.root = root_window
 
         # Colors
         self.primary = "#27AE60"
@@ -82,7 +82,16 @@ class TeamManagementPage:
     def show_manage_user_popup(self, user):
         popup = ctk.CTkToplevel(self.root)
         popup.title(f"Manage User - {user.get('first_name', '')}")
-        popup.geometry("450x700")
+
+        # 🚀 POGI UPDATE: THE CENTERING MATH!
+        window_width = 450
+        window_height = 700
+        screen_width = popup.winfo_screenwidth()
+        screen_height = popup.winfo_screenheight()
+        x_cordinate = int((screen_width / 2) - (window_width / 2))
+        y_cordinate = int((screen_height / 2) - (window_height / 2))
+        popup.geometry(f"{window_width}x{window_height}+{x_cordinate}+{y_cordinate}")
+
         popup.transient(self.root)
         popup.grab_set()
 
@@ -115,6 +124,8 @@ class TeamManagementPage:
         emp_entry = create_field("Employee ID", user.get('employee_id'))
         rfid_entry = create_field("RFID Code", user.get('rfid_code'))
         pwd_entry = create_field("Password", user.get('password'))
+
+        original_password = user.get('password')
 
         ctk.CTkLabel(scroll_frame, text="System Role", font=("Arial", 11, "bold")).pack(anchor="w", pady=(10, 2))
 
@@ -159,16 +170,31 @@ class TeamManagementPage:
             fname = fname_entry.get().strip()
             lname = lname_entry.get().strip()
             emp_id = emp_entry.get().strip()
-            pwd = pwd_entry.get().strip()
+            new_pwd = pwd_entry.get().strip()
             role_val = role_var.get()
             stat_val = stat_var.get()
             new_rfid = rfid_entry.get().strip()
             s_val = susp_val_entry.get() if stat_val == "Suspended" else 0
             s_type = susp_type_var.get()
 
-            success = self.engine.update_user_account(user['id'], fname, lname, emp_id, pwd, role_val, stat_val,
+            success = self.engine.update_user_account(user['id'], fname, lname, emp_id, new_pwd, role_val, stat_val,
                                                       new_rfid, s_val, s_type)
             if success:
+                if new_pwd != original_password:
+                    try:
+                        admin_name = "Admin/Kapitan"
+                        if hasattr(self.parent.winfo_toplevel(), "title"):
+                            admin_name = "System Admin"
+
+                        # 🚀 THE POGI FIX: Ginamit na natin yung 'emp_id' imbes na user['id']!
+                        self.engine.log_security_event(
+                            user_id=emp_id,
+                            action="FORCED PASSWORD RESET",
+                            details=f"VIA ADMIN REQUEST: {admin_name} directly changed the password for {fname} {lname} ({role_val})."
+                        )
+                    except Exception as e:
+                        print(f"Failed to log forced reset: {e}")
+
                 messagebox.showinfo("Success", "User account successfully updated!")
                 popup.destroy()
                 self.load_users()
