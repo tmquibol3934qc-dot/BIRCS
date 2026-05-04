@@ -32,56 +32,44 @@ class DatabaseEngine:
         return mysql.connector.connect(**self.db_config)
 
     # --- REGISTRATION ---
-    def register_user(self, data):
-        """
-        I-save ang bagong staff account sa database kasama ang profile picture.
-        """
+    def register_user(self, employee_id, rfid_code, first_name, last_name, contact_no, password, q1, a1, q2, a2, q3, a3,
+                 role):
+        import mysql.connector
+
+        # 🚀 THE NULL MAGIC TRICK:
+        # Kapag blanko ("") ang RFID, ginagawa nating None para maging NULL sa MySQL.
+        # Pag hindi natin ginawa 'to, iiyak si MySQL ng "Duplicate Entry" sa blanko!
+        if not rfid_code or rfid_code.strip() == "":
+            rfid_code = None
+
         try:
-            conn = self.get_connection()
+            # Kumonekta gamit yung resipe (config) mo
+            conn = mysql.connector.connect(**self.db_config)
             cursor = conn.cursor()
 
-            # 🛑 THE FIX: Siguraduhin na 16 na %s ito para tumama sa 16 na columns!
+            # Ang query na saktong-sakto sa columns mo sa screenshot kanina
             query = """
                 INSERT INTO users (
                     employee_id, rfid_code, first_name, last_name, 
-                    contact_no, position, password, 
-                    q1, a1, q2, a2, q3, a3, 
-                    role, status, profile_pic
-                ) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    contact_no, password, q1, a1, q2, a2, q3, a3, role
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
 
-            # Hatiin natin yung full name pabalik sa first at last kung kailangan
-            # Or i-adjust depende sa kung paano mo pinasa yung 'name' sa SignupWindow
-            full_name = data.get('name', 'User Name').split(' ')
-            f_name = full_name[0]
-            l_name = full_name[1] if len(full_name) > 1 else ""
-
-            # 🛑 THE VALUES TUPLE: Dapat 16 din ang laman nito at sakto ang pagkakasunod-sunod!
             values = (
-                data.get('emp_id'),
-                data.get('rfid'),
-                f_name,
-                l_name,
-                "09123456789",  # Default contact or kuhanin sa data kung meron
-                data.get('position'),
-                data.get('pass'),
-                data.get('q1'), data.get('a1'),
-                data.get('q2'), data.get('a2'),
-                data.get('q3'), data.get('a3'),
-                "Staff",  # Default role
-                "Active",  # Default status
-                data.get('profile_pic')  # HETO YUNG 16th PARAMETER!
+                employee_id, rfid_code, first_name, last_name,
+                contact_no, password, q1, a1, q2, a2, q3, a3, role
             )
 
             cursor.execute(query, values)
             conn.commit()
             conn.close()
-            return True, "Account created successfully!"
+
+            print(f"Successfully added user: {first_name} {last_name}")
+            return True
 
         except Exception as e:
-            if conn: conn.close()
-            return False, f"Database Error: {str(e)}"
+            print(f"Failed to add user: {e}")
+            return False
 
     # --- LOGIN (With RFID Support!) ---\
     def authenticate_user(self, login_val, password=""):
@@ -93,12 +81,12 @@ class DatabaseEngine:
 
             # --- 1. LOGIN TYPE CHECK (RFID vs Manual) ---
             if not password:
-                # No password means it was an RFID scan!
-                query = "SELECT * FROM users WHERE rfid_code = %s OR employee_id = %s"
-                cursor.execute(query, (login_val, login_val))
+                # STRICT BOUNCER: Kapag walang password, RFID scan 'to!
+                # TINANGGAL NATIN YUNG "OR employee_id" DITO PARA HINDI MAKA-BYPASS.
+                query = "SELECT * FROM users WHERE rfid_code = %s"
+                cursor.execute(query, (login_val,))
             else:
-                # Normal manual login!
-                # THE FIX: Now it checks if the text you typed matches EITHER the username OR the employee_id!
+                # Normal manual login! (May Username/ID AT May Password)
                 query = "SELECT * FROM users WHERE (username = %s OR employee_id = %s) AND password = %s"
                 cursor.execute(query, (login_val, login_val, password))
 
@@ -692,14 +680,14 @@ class DatabaseEngine:
             print(f"Error fetching categories: {e}")
             return ["Theft", "Physical Assault", "Noise Complaint", "Property Damage"]
 
-    def advanced_search_incidents(self, keyword="", category="All Categories", limit=10, offset=0):
+    def advanced_search_incidents(self, keyword="", category="All Categories"):
         import mysql.connector
         try:
             # Kumonekta gamit yung config mo bossing
             conn = mysql.connector.connect(**self.db_config)
             cursor = conn.cursor(dictionary=True)
 
-            # Base query: Naghahanap sa Case ID, Complainant, o Respondent
+            # Base query: Naghahanap sa Case ID, Complainant/Plaintiff, o Respondent/Opposing Party
             query = """
                 SELECT * FROM incidents 
                 WHERE (case_no LIKE %s OR complainant_name LIKE %s OR respondent_name LIKE %s)
@@ -711,10 +699,9 @@ class DatabaseEngine:
                 query += " AND category = %s"
                 params.append(category)
 
-            # 🚀 HETO YUNG PANG-PAGER!
-            # I-order natin by case_no (pinakabago sa taas) tapos apply ang LIMIT at OFFSET
-            query += " ORDER BY case_no DESC LIMIT %s OFFSET %s"
-            params.extend([limit, offset])
+            # 🚀 THE FIX: Tinanggal na natin ang LIMIT at OFFSET!
+            # Kukunin na natin LAHAT tapos i-order natin para yung pinakabago nasa taas.
+            query += " ORDER BY case_no DESC"
 
             cursor.execute(query, tuple(params))
             result = cursor.fetchall()
