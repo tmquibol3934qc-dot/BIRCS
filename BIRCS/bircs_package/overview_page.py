@@ -12,8 +12,17 @@ class OverviewPage:
         self.sidebar_color, self.text_dark, self.text_muted = "#1D2153", "#2B2B2B", "#7A7A7A"
         self.primary, self.orange, self.red, self.green = "#2980B9", "#F39C12", "#E74C3C", "#27AE60"
 
-        self.container = ctk.CTkScrollableFrame(parent_frame, fg_color="transparent")
+        # 🚀 THE FIX: Binalik natin sa 'self.container' ang pangalan para hindi mag-error ang Dashboard!
+        self.container = ctk.CTkFrame(parent_frame, fg_color="transparent")
         self.container.pack(fill="both", expand=True)
+
+        # 1. Sticky Top Frame (Dito ang Header at Cards, naka-fix sa taas)
+        self.sticky_top = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.sticky_top.pack(fill="x", side="top")
+
+        # 2. Scrollable Body Frame (Dito ang Table at iba pang Analytics sa baba)
+        self.scroll_container = ctk.CTkScrollableFrame(self.container, fg_color="transparent")
+        self.scroll_container.pack(fill="both", expand=True)
 
         self.build_ui()
 
@@ -21,20 +30,27 @@ class OverviewPage:
         db_stats = self.engine.get_dashboard_stats()
         db_analytics = self.engine.get_incident_analytics()
 
-        header_frame = ctk.CTkFrame(self.container, fg_color="white", corner_radius=8)
+        # ==========================================
+        # 📌 1. STICKY TOP SECTION
+        # ==========================================
+        header_frame = ctk.CTkFrame(self.sticky_top, fg_color="white", corner_radius=8)
         header_frame.pack(fill="x", padx=30, pady=(30, 15))
         ctk.CTkLabel(header_frame, text="Dashboard Overview", font=("Arial", 28, "bold"),
                      text_color=self.sidebar_color).pack(side="left", padx=20, pady=15)
 
-        stats_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        stats_frame.pack(fill="x", padx=25)
-        self.create_stat_card(stats_frame, "Total Cases", str(db_stats['Total Cases']), self.red)
-        self.create_stat_card(stats_frame, "Normal", str(db_stats['Pending']), self.orange)
-        self.create_stat_card(stats_frame, "Resolved", str(db_stats['Resolved']), self.green)
-        self.create_stat_card(stats_frame, "Urgent", str(db_stats['Urgent']), self.red)
+        stats_frame = ctk.CTkFrame(self.sticky_top, fg_color="transparent")
+        stats_frame.pack(fill="x", padx=25, pady=(0, 10))
 
-        body_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        body_frame.pack(fill="both", expand=True, padx=30, pady=20)
+        self.create_stat_card(stats_frame, "Total Cases", str(db_stats['Total Cases']), self.primary)
+        self.create_stat_card(stats_frame, "Routine", str(db_stats['Pending']), self.orange)
+        self.create_stat_card(stats_frame, "Resolved", str(db_stats['Resolved']), self.green)
+        self.create_stat_card(stats_frame, "High Priority", str(db_stats['Urgent']), self.red)
+
+        # ==========================================
+        # 📜 2. SCROLLABLE BODY SECTION
+        # ==========================================
+        body_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
+        body_frame.pack(fill="both", expand=True, padx=30, pady=(10, 20))
         body_frame.grid_columnconfigure(0, weight=3)
         body_frame.grid_columnconfigure(1, weight=1)
 
@@ -45,7 +61,8 @@ class OverviewPage:
         right_panel = ctk.CTkFrame(body_frame, fg_color="transparent")
         right_panel.grid(row=0, column=1, sticky="nsew")
         self.build_active_personnel(right_panel)
-        self.build_incident_analytics(right_panel, db_analytics)
+
+        self.build_incident_analytics(right_panel, db_analytics, db_stats)
 
         self.build_bottom_analytics()
 
@@ -112,7 +129,7 @@ class OverviewPage:
         if not all_data:
             self.draw_table_rows([])
             self.lbl_page.configure(text="Page 0 of 0")
-            self.btn_prev.configure(state="disabled");
+            self.btn_prev.configure(state="disabled")
             self.btn_next.configure(state="disabled")
             return
 
@@ -138,7 +155,7 @@ class OverviewPage:
 
         for case in data_to_draw:
             row = ctk.CTkFrame(self.table_rows_frame, fg_color="white", height=45, cursor="hand2")
-            row.pack(fill="x");
+            row.pack(fill="x")
             row.pack_propagate(False)
 
             ctk.CTkLabel(row, text=case.get('case_no'), font=("Arial", 12, "bold"), text_color=self.text_dark, width=60,
@@ -153,8 +170,15 @@ class OverviewPage:
 
             status = case.get('status')
             color = self.green if status == 'Resolved' else (self.red if status == 'Urgent' else self.orange)
-            ctk.CTkLabel(row, text="Pending" if status == "Pending" else status, text_color=color,
-                         font=("Arial", 12, "bold"), width=80, anchor="e", cursor="hand2").pack(side="right", padx=20)
+
+            display_status = status
+            if status == "Pending":
+                display_status = "Routine"
+            elif status == "Urgent":
+                display_status = "High Priority"
+
+            ctk.CTkLabel(row, text=display_status, text_color=color,
+                         font=("Arial", 12, "bold"), width=100, anchor="e", cursor="hand2").pack(side="right", padx=20)
 
             click_command = lambda e, c=case: IncidentDetailsModal(self.container.winfo_toplevel(), c, self.engine,
                                                                    self.user, self.trigger_live_filter)
@@ -167,10 +191,14 @@ class OverviewPage:
     def build_active_personnel(self, parent):
         card = ctk.CTkFrame(parent, fg_color="white", border_color="#E0E0E0", border_width=1, corner_radius=8)
         card.pack(fill="x", pady=(0, 20))
-        ctk.CTkLabel(card, text="Team Roster & Status", font=("Arial", 14, "bold"), text_color=self.sidebar_color).pack(
-            anchor="w", padx=20, pady=(20, 10))
+
+        header = ctk.CTkFrame(card, fg_color=self.sidebar_color, corner_radius=0)
+        header.pack(fill="x")
+        ctk.CTkLabel(header, text="👥 Team Roster & Status", font=("Arial", 14, "bold"), text_color="white").pack(
+            anchor="w", padx=20, pady=10)
+
         list_frame = ctk.CTkScrollableFrame(card, fg_color="transparent", height=150)
-        list_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        list_frame.pack(fill="both", expand=True, padx=10, pady=10)
         for u in self.engine.get_all_users() or []:
             row = ctk.CTkFrame(list_frame, fg_color="transparent")
             row.pack(fill="x", padx=10, pady=5)
@@ -184,25 +212,59 @@ class OverviewPage:
             ctk.CTkLabel(txt_frame, text=f"{u.get('role')} | {u.get('status')}", font=("Arial", 10),
                          text_color=self.text_muted).pack(anchor="w", pady=0)
 
-    def build_incident_analytics(self, parent, data):
+    def build_incident_analytics(self, parent, data, stats):
         card = ctk.CTkFrame(parent, fg_color="white", border_color="#E0E0E0", border_width=1, corner_radius=8)
         card.pack(fill="x")
-        ctk.CTkLabel(card, text="Incident Analytics", font=("Arial", 14, "bold"), text_color=self.sidebar_color).pack(
-            anchor="w", padx=20, pady=(20, 10))
-        ctk.CTkLabel(card, text=f"🔥 Hotspot: {data.get('hotspot', 'N/A')}", font=("Arial", 12, "bold"),
-                     text_color=self.red).pack(anchor="w", padx=20, pady=(5, 5))
-        ctk.CTkLabel(card, text=f"🕒 Peak: {data.get('peak_hours', 'N/A')}", font=("Arial", 12, "bold"),
-                     text_color=self.text_dark).pack(anchor="w", padx=20, pady=(5, 20))
+
+        header = ctk.CTkFrame(card, fg_color=self.sidebar_color, corner_radius=0)
+        header.pack(fill="x")
+        ctk.CTkLabel(header, text="📊 Analytics & Trends", font=("Arial", 14, "bold"), text_color="white").pack(
+            anchor="w", padx=20, pady=10)
+
+        info_frame = ctk.CTkFrame(card, fg_color="transparent")
+        info_frame.pack(fill="x", padx=20, pady=15)
+        ctk.CTkLabel(info_frame, text=f"🔥 Hotspot Zone: {data.get('hotspot', 'N/A')}", font=("Arial", 12, "bold"),
+                     text_color=self.red).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(info_frame, text=f"🕒 Peak Hours: {data.get('peak_hours', 'N/A')}", font=("Arial", 12, "bold"),
+                     text_color=self.text_dark).pack(anchor="w")
+
+        ctk.CTkFrame(card, height=1, fg_color="#E0E0E0").pack(fill="x", padx=20)
+
+        chart_frame = ctk.CTkFrame(card, fg_color="transparent")
+        chart_frame.pack(fill="x", padx=20, pady=15)
+        ctk.CTkLabel(chart_frame, text="Case Distribution", font=("Arial", 12, "bold"),
+                     text_color=self.text_muted).pack(anchor="w", pady=(0, 10))
+
+        total = stats.get('Total Cases', 1)
+        if total == 0: total = 1
+
+        self.create_mini_bar(chart_frame, "Resolved", stats.get('Resolved', 0), total, self.green)
+        self.create_mini_bar(chart_frame, "Routine", stats.get('Pending', 0), total, self.orange)
+        self.create_mini_bar(chart_frame, "High Prio", stats.get('Urgent', 0), total, self.red)
+
+    def create_mini_bar(self, parent, label, value, total, color):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(row, text=label, font=("Arial", 11, "bold"), width=75, anchor="w", text_color=self.text_dark).pack(
+            side="left")
+
+        progress = ctk.CTkProgressBar(row, height=12, progress_color=color, fg_color="#EBEBEB")
+        progress.pack(side="left", fill="x", expand=True, padx=10)
+        progress.set(value / total)
+
+        ctk.CTkLabel(row, text=str(value), font=("Arial", 11, "bold"), text_color=color, width=20, anchor="e").pack(
+            side="right")
 
     def build_bottom_analytics(self):
-        report_frame = ctk.CTkFrame(self.container, fg_color="white", corner_radius=15, border_color="#E0E0E0",
+        report_frame = ctk.CTkFrame(self.scroll_container, fg_color="white", corner_radius=15, border_color="#E0E0E0",
                                     border_width=1)
         report_frame.pack(fill="x", padx=30, pady=(0, 30))
 
         top_ctrl = ctk.CTkFrame(report_frame, fg_color="transparent")
         top_ctrl.pack(fill="x", padx=25, pady=(20, 15))
 
-        ctk.CTkLabel(top_ctrl, text="📊 Comprehensive Analytics Report", font=("Arial", 20, "bold"),
+        ctk.CTkLabel(top_ctrl, text="📑 Comprehensive Report", font=("Arial", 20, "bold"),
                      text_color=self.sidebar_color).pack(side="left")
 
         self.report_timeframe = ctk.StringVar(value="This Month")
