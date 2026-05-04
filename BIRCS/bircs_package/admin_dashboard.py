@@ -1,5 +1,8 @@
 import customtkinter as ctk
 from tkinter import messagebox
+import os
+from PIL import Image
+
 
 class AdminDashboardWindow:
     def __init__(self, engine, user_data, parent_dashboard=None):
@@ -9,7 +12,7 @@ class AdminDashboardWindow:
 
         self.window = ctk.CTkToplevel()
         self.window.title("BICRS - Kapitan Control Center")
-        self.window.state('zoomed') # Safe against Alt+Tab bug
+        self.window.state('zoomed')  # Safe against Alt+Tab bug
         self.window.bind("<Key>", self.handle_shortcuts)
         self.window.configure(fg_color="#F4F7F6")
 
@@ -37,29 +40,69 @@ class AdminDashboardWindow:
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
-        ctk.CTkLabel(self.sidebar, text="BICRS ADMIN", font=("Arial", 22, "bold"), text_color="white").pack(pady=(30, 5))
-        ctk.CTkLabel(self.sidebar, text="Kapitan Override Active", font=("Arial", 11, "italic"), text_color=self.primary).pack(pady=(0, 30))
+        # 🚀 POGI UPDATE: Logo Integration para kay Kapitan!
+        logo_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        logo_frame.pack(pady=(30, 20), padx=20, fill="x")
+
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            logo_path = os.path.join(current_dir, 'logo.jpg')
+
+            if not os.path.exists(logo_path):
+                logo_path = os.path.join(current_dir, 'assets', 'logo.jpg')
+
+            if os.path.exists(logo_path):
+                logo_img = Image.open(logo_path)
+                ctk_logo = ctk.CTkImage(light_image=logo_img, dark_image=logo_img, size=(80, 80))
+
+                logo_label = ctk.CTkLabel(logo_frame, text="", image=ctk_logo)
+                logo_label.pack(anchor="center", pady=(0, 5))
+            else:
+                ctk.CTkLabel(logo_frame, text="BICRS ADMIN", font=("Arial", 22, "bold"), text_color="white").pack(
+                    anchor="center")
+
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+            ctk.CTkLabel(logo_frame, text="BICRS ADMIN", font=("Arial", 22, "bold"), text_color="white").pack(
+                anchor="center")
+
+        ctk.CTkLabel(logo_frame, text="Kapitan Override Active", font=("Arial", 11, "italic"),
+                     text_color=self.primary).pack(anchor="center", pady=(5, 0))
 
         user_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}".strip()
-        ctk.CTkLabel(self.sidebar, text=f"Welcome, {user_name}", font=("Arial", 14, "bold"), text_color="white").pack(pady=(10, 2))
-        ctk.CTkLabel(self.sidebar, text="KAPITAN", font=("Arial", 10, "bold"), text_color=self.primary).pack(pady=(0, 30))
+        ctk.CTkLabel(self.sidebar, text=f"Welcome, {user_name}", font=("Arial", 14, "bold"), text_color="white").pack(
+            pady=(10, 2))
+        ctk.CTkLabel(self.sidebar, text="KAPITAN", font=("Arial", 10, "bold"), text_color=self.primary).pack(
+            pady=(0, 30))
 
-        self.btn_master = ctk.CTkButton(self.sidebar, text="📁 Master Dashboard", font=("Arial", 14, "bold"), fg_color="transparent", text_color="white", hover_color=self.dark_green, anchor="w", command=self.show_master_dashboard)
+        self.btn_master = ctk.CTkButton(self.sidebar, text="📁 Master Dashboard", font=("Arial", 14, "bold"),
+                                        fg_color="transparent", text_color="white", hover_color=self.dark_green,
+                                        anchor="w", command=self.show_master_dashboard)
         self.btn_master.pack(fill="x", padx=15, pady=5)
 
-        self.btn_team = ctk.CTkButton(self.sidebar, text="👥 Team Management", font=("Arial", 14, "bold"), fg_color="transparent", text_color="white", hover_color=self.dark_green, anchor="w", command=self.show_user_management)
+        self.btn_team = ctk.CTkButton(self.sidebar, text="👥 Team Management", font=("Arial", 14, "bold"),
+                                      fg_color="transparent", text_color="white", hover_color=self.dark_green,
+                                      anchor="w", command=self.show_user_management)
         self.btn_team.pack(fill="x", padx=15, pady=5)
 
-        self.btn_logs = ctk.CTkButton(self.sidebar, text="🕒 System Logs", font=("Arial", 14, "bold"), fg_color="transparent", text_color="white", hover_color=self.dark_green, anchor="w", command=self.show_login_logs)
+        self.btn_logs = ctk.CTkButton(self.sidebar, text="🕒 System Logs", font=("Arial", 14, "bold"),
+                                      fg_color="transparent", text_color="white", hover_color=self.dark_green,
+                                      anchor="w", command=self.show_login_logs)
         self.btn_logs.pack(fill="x", padx=15, pady=5)
 
-        self.btn_alerts = ctk.CTkButton(self.sidebar, text="🚨 Security Alerts", font=("Arial", 14, "bold"), fg_color="transparent", text_color=self.red, hover_color=self.dark_green, anchor="w", command=self.show_security_alerts)
+        self.btn_alerts = ctk.CTkButton(self.sidebar, text="🚨 Security Alerts", font=("Arial", 14, "bold"),
+                                        fg_color="transparent", text_color=self.red, hover_color=self.dark_green,
+                                        anchor="w", command=self.show_security_alerts)
         self.btn_alerts.pack(fill="x", padx=15, pady=5)
 
-        self.btn_maintenance = ctk.CTkButton(self.sidebar, text="⚙️ System Maintenance", font=("Arial", 14, "bold"), fg_color="transparent", text_color="white", hover_color=self.dark_green, anchor="w", command=self.show_system_maintenance)
+        self.btn_maintenance = ctk.CTkButton(self.sidebar, text="⚙️ System Maintenance", font=("Arial", 14, "bold"),
+                                             fg_color="transparent", text_color="white", hover_color=self.dark_green,
+                                             anchor="w", command=self.show_system_maintenance)
         self.btn_maintenance.pack(fill="x", padx=15, pady=5)
 
-        ctk.CTkButton(self.sidebar, text="Lock & Exit Admin", font=("Arial", 12, "bold"), fg_color="transparent", text_color=self.red, hover_color="#34495E", anchor="w", command=self.lock_and_exit).pack(side="bottom", fill="x", padx=15, pady=30)
+        ctk.CTkButton(self.sidebar, text="Lock & Exit Admin", font=("Arial", 12, "bold"), fg_color="transparent",
+                      text_color=self.red, hover_color="#34495E", anchor="w", command=self.lock_and_exit).pack(
+            side="bottom", fill="x", padx=15, pady=30)
 
         self.main_frame = ctk.CTkFrame(self.window, fg_color="transparent")
         self.main_frame.pack(side="right", fill="both", expand=True)
@@ -85,8 +128,12 @@ class AdminDashboardWindow:
             from master_dashboard_page import MasterDashboardPage
             MasterDashboardPage(self.main_frame, self.engine, self.window)
         except ImportError:
-            from bircs_package.master_dashboard_page import MasterDashboardPage
-            MasterDashboardPage(self.main_frame, self.engine, self.window)
+            try:
+                from bircs_package.master_dashboard_page import MasterDashboardPage
+                MasterDashboardPage(self.main_frame, self.engine, self.window)
+            except ImportError:
+                from .master_dashboard_page import MasterDashboardPage
+                MasterDashboardPage(self.main_frame, self.engine, self.window)
 
     def show_user_management(self):
         self.clear_main_frame()
@@ -95,8 +142,12 @@ class AdminDashboardWindow:
             from team_management_page import TeamManagementPage
             TeamManagementPage(self.main_frame, self.engine, self.window)
         except ImportError:
-            from bircs_package.team_management_page import TeamManagementPage
-            TeamManagementPage(self.main_frame, self.engine, self.window)
+            try:
+                from bircs_package.team_management_page import TeamManagementPage
+                TeamManagementPage(self.main_frame, self.engine, self.window)
+            except ImportError:
+                from .team_management_page import TeamManagementPage
+                TeamManagementPage(self.main_frame, self.engine, self.window)
 
     def show_login_logs(self):
         self.clear_main_frame()
@@ -105,8 +156,12 @@ class AdminDashboardWindow:
             from system_logs_page import SystemLogsPage
             SystemLogsPage(self.main_frame, self.engine)
         except ImportError:
-            from bircs_package.system_logs_page import SystemLogsPage
-            SystemLogsPage(self.main_frame, self.engine)
+            try:
+                from bircs_package.system_logs_page import SystemLogsPage
+                SystemLogsPage(self.main_frame, self.engine)
+            except ImportError:
+                from .system_logs_page import SystemLogsPage
+                SystemLogsPage(self.main_frame, self.engine)
 
     def show_security_alerts(self):
         self.clear_main_frame()
@@ -115,8 +170,12 @@ class AdminDashboardWindow:
             from security_alerts_page import SecurityAlertsPage
             SecurityAlertsPage(self.main_frame, self.engine)
         except ImportError:
-            from bircs_package.security_alerts_page import SecurityAlertsPage
-            SecurityAlertsPage(self.main_frame, self.engine)
+            try:
+                from bircs_package.security_alerts_page import SecurityAlertsPage
+                SecurityAlertsPage(self.main_frame, self.engine)
+            except ImportError:
+                from .security_alerts_page import SecurityAlertsPage
+                SecurityAlertsPage(self.main_frame, self.engine)
 
     def show_system_maintenance(self):
         self.clear_main_frame()
@@ -125,8 +184,12 @@ class AdminDashboardWindow:
             from system_maintenance_page import SystemMaintenancePage
             SystemMaintenancePage(self.main_frame, self.engine, self.window)
         except ImportError:
-            from bircs_package.system_maintenance_page import SystemMaintenancePage
-            SystemMaintenancePage(self.main_frame, self.engine, self.window)
+            try:
+                from bircs_package.system_maintenance_page import SystemMaintenancePage
+                SystemMaintenancePage(self.main_frame, self.engine, self.window)
+            except ImportError:
+                from .system_maintenance_page import SystemMaintenancePage
+                SystemMaintenancePage(self.main_frame, self.engine, self.window)
 
     # ==========================================
     # SYSTEM CONTROLS
@@ -153,8 +216,13 @@ class AdminDashboardWindow:
             if widget_type in ['CTkEntry', 'CTkTextbox', 'Entry', 'Text']: return
 
         key = event.char.lower()
-        if key == '1': self.show_master_dashboard()
-        elif key == '2': self.show_user_management()
-        elif key == '3': self.show_login_logs()
-        elif key == '4': self.show_security_alerts()
-        elif key == 'l': self.lock_and_exit()
+        if key == '1':
+            self.show_master_dashboard()
+        elif key == '2':
+            self.show_user_management()
+        elif key == '3':
+            self.show_login_logs()
+        elif key == '4':
+            self.show_security_alerts()
+        elif key == 'l':
+            self.lock_and_exit()
