@@ -40,8 +40,15 @@ class IncidentDetailsModal:
         ctk.CTkLabel(info_frame, text=row_data.get('category', 'Uncategorized'), text_color=self.primary,
                      font=("Arial", 12, "bold")).grid(row=0, column=1, sticky="w", padx=10, pady=(10, 5))
 
+        # 🚀 POGI UPDATE: High Priority at Normal Statuses!
         status = row_data.get('status') or 'N/A'
-        display_status = "Normal" if status == "Pending" else status
+        if status == "Pending":
+            display_status = "Normal"
+        elif status == "Urgent":
+            display_status = "High Priority"
+        else:
+            display_status = status
+
         status_color = self.red if status == 'Urgent' else (self.green if status == 'Resolved' else self.orange)
 
         ctk.CTkLabel(info_frame, text="Status:", font=("Arial", 12, "bold"), text_color=self.text_dark).grid(row=0,
@@ -60,23 +67,27 @@ class IncidentDetailsModal:
 
         parties_frame = ctk.CTkFrame(scroll_area, fg_color="#F8F9FA", corner_radius=8)
         parties_frame.pack(fill="x", padx=20, pady=(5, 15))
-        ctk.CTkLabel(parties_frame, text="Complainant:", font=("Arial", 12, "bold"), text_color=self.primary).grid(
+
+        # 🚀 POGI UPDATE: Nagsusumbong at Inirereklamo!
+        ctk.CTkLabel(parties_frame, text="Nagsusumbong:", font=("Arial", 12, "bold"), text_color=self.primary).grid(
             row=0, column=0, sticky="w", padx=15, pady=(10, 2))
         ctk.CTkLabel(parties_frame,
                      text=f"{row_data.get('complainant_name')} (Contact: {row_data.get('complainant_contact') or 'N/A'})",
                      font=("Arial", 12)).grid(row=0, column=1, sticky="w", padx=10, pady=(10, 2))
-        ctk.CTkLabel(parties_frame, text="Respondent:", font=("Arial", 12, "bold"), text_color=self.red).grid(row=1,
-                                                                                                              column=0,
-                                                                                                              sticky="w",
-                                                                                                              padx=15,
-                                                                                                              pady=(2,
-                                                                                                                    10))
+
+        ctk.CTkLabel(parties_frame, text="Inirereklamo:", font=("Arial", 12, "bold"), text_color=self.red).grid(row=1,
+                                                                                                                column=0,
+                                                                                                                sticky="w",
+                                                                                                                padx=15,
+                                                                                                                pady=(2,
+                                                                                                                      10))
         ctk.CTkLabel(parties_frame,
                      text=f"{row_data.get('respondent_name')} (Contact: {row_data.get('respondent_contact') or 'N/A'})",
                      font=("Arial", 12)).grid(row=1, column=1, sticky="w", padx=10, pady=(2, 10))
 
         ctk.CTkLabel(scroll_area, text="📝 Phase 1: Original Report & Settlement", font=("Arial", 14, "bold"),
                      text_color=self.text_dark).pack(anchor="w", padx=20)
+
         n1_box = ctk.CTkTextbox(scroll_area, height=80, fg_color="#FFFFFF", text_color="#2B2B2B", border_width=1,
                                 border_color="#E0E0E0")
         n1_box.pack(fill="x", padx=20, pady=5)
@@ -101,11 +112,13 @@ class IncidentDetailsModal:
                                                                                                             padx=20,
                                                                                                             pady=(15,
                                                                                                                   5))
+
             n2_box = ctk.CTkTextbox(scroll_area, height=80, fg_color="#FFFFFF", text_color="#2B2B2B", border_width=1,
                                     border_color="#E0E0E0")
             n2_box.pack(fill="x", padx=20, pady=5)
             n2_box.insert("1.0", f"STAFF REASON:\n{row_data.get('narrative_2')}")
             n2_box.configure(state="disabled")
+
             if row_data.get('settlement_details_2'):
                 r2_box = ctk.CTkTextbox(scroll_area, height=80, fg_color="#F0FFF0", text_color="#2B2B2B",
                                         border_width=1, border_color="#E0E0E0")
@@ -152,11 +165,11 @@ class IncidentDetailsModal:
                                  text_color="gray").pack(side="left", padx=10)
 
         # ---------------------------------------------------------
-        # 🚀 DITO YUNG NA-UPDATE NA PRINT BUTTON
+        # 🚀 PRINT BUTTON NA MAY BOUNCER
         # ---------------------------------------------------------
         ctk.CTkButton(btn_frame, text="🖨️ Print Blotter", fg_color=self.primary, hover_color="#1E8449",
-                      text_color="white", font=("Arial", 12, "bold"),
-                      command=lambda: self.handle_print(row_data)).pack(side="left", padx=10)
+                      text_color="white", font=("Arial", 12, "bold"), command=lambda: self.handle_print(row_data)).pack(
+            side="left", padx=10)
 
         ctk.CTkButton(btn_frame, text="Close Report", command=self.popup.destroy, fg_color="#E0E0E0",
                       text_color=self.text_dark, hover_color="#CCCCCC", font=("Arial", 12, "bold")).pack(side="left",
@@ -189,21 +202,15 @@ class IncidentDetailsModal:
         ctk.CTkButton(req_window, text="Send Request", fg_color=self.primary, font=("Arial", 12, "bold"),
                       command=submit_request).pack(pady=10)
 
-    # ---------------------------------------------------------
-    # 🚀 DITO YUNG BAGONG BOUNCER FUNCTION PARA SA PRINTING
-    # ---------------------------------------------------------
     def handle_print(self, row_data):
-        """Ang Bouncer ng Printing System"""
         status = row_data.get('status', '').strip()
 
-        # I-check kung Resolved (o Completed) na ang kaso
         if status.lower() not in ["resolved", "completed"]:
             messagebox.showwarning(
                 "Printing Restricted",
                 f"Bawal i-print ang kasong ito dahil {status.upper()} pa.\n\n"
                 "Siguraduhing 'Resolved' o 'Completed' na ang status bago humingi ng Certificate/Report."
             )
-            return  # ⛔ STOP! Walang papel na lalabas!
+            return
 
-        # 🚀 KUNG PASOK SA BANGA, TATAWAGIN NA NATIN YUNG PDF GENERATOR!
         PDFGenerator.export_blotter(row_data)
