@@ -1,7 +1,19 @@
 import customtkinter as ctk
-import math
+from collections import Counter
+from datetime import datetime
 from .pdf_generator import PDFGenerator
-from .modals import IncidentDetailsModal
+
+try:
+    import matplotlib
+
+    matplotlib.use("TkAgg")
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    from matplotlib.ticker import MaxNLocator  # 🚀 POGI UPDATE: Para whole numbers lang sa graphs!
+
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
 
 
 class OverviewPage:
@@ -9,323 +21,270 @@ class OverviewPage:
         self.engine = engine
         self.user = user_data
 
-        self.sidebar_color, self.text_dark, self.text_muted = "#1D2153", "#2B2B2B", "#7A7A7A"
-        self.primary, self.orange, self.red, self.green = "#2980B9", "#F39C12", "#E74C3C", "#27AE60"
+        self.bg_color = "#F8F9F5"
+        self.text_dark = "#2B2B2B"
 
-        # 🚀 THE FIX: Binalik natin sa 'self.container' ang pangalan para hindi mag-error ang Dashboard!
-        self.container = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        # Chart Colors
+        self.chart_cyan = "#00BCD4"
+        self.chart_blue = "#4285F4"
+        self.chart_dark_blue = "#3F51B5"
+
+        self.container = ctk.CTkScrollableFrame(parent_frame, fg_color="transparent")
         self.container.pack(fill="both", expand=True)
 
-        # 1. Sticky Top Frame (Dito ang Header at Cards, naka-fix sa taas)
-        self.sticky_top = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.sticky_top.pack(fill="x", side="top")
+        self.all_incidents = self.engine.get_all_incidents()
 
-        # 2. Scrollable Body Frame (Dito ang Table at iba pang Analytics sa baba)
-        self.scroll_container = ctk.CTkScrollableFrame(self.container, fg_color="transparent")
-        self.scroll_container.pack(fill="both", expand=True)
+        self.canvases = {}
 
         self.build_ui()
 
     def build_ui(self):
-        db_stats = self.engine.get_dashboard_stats()
-        db_analytics = self.engine.get_incident_analytics()
-
-        # ==========================================
-        # 📌 1. STICKY TOP SECTION
-        # ==========================================
-        header_frame = ctk.CTkFrame(self.sticky_top, fg_color="white", corner_radius=8)
-        header_frame.pack(fill="x", padx=30, pady=(30, 15))
-        ctk.CTkLabel(header_frame, text="Dashboard Overview", font=("Arial", 28, "bold"),
-                     text_color=self.sidebar_color).pack(side="left", padx=20, pady=15)
-
-        stats_frame = ctk.CTkFrame(self.sticky_top, fg_color="transparent")
-        stats_frame.pack(fill="x", padx=25, pady=(0, 10))
-
-        self.create_stat_card(stats_frame, "Total Cases", str(db_stats['Total Cases']), self.primary)
-        self.create_stat_card(stats_frame, "Routine", str(db_stats['Pending']), self.orange)
-        self.create_stat_card(stats_frame, "Resolved", str(db_stats['Resolved']), self.green)
-        self.create_stat_card(stats_frame, "High Priority", str(db_stats['Urgent']), self.red)
-
-        # ==========================================
-        # 📜 2. SCROLLABLE BODY SECTION
-        # ==========================================
-        body_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
-        body_frame.pack(fill="both", expand=True, padx=30, pady=(10, 20))
-        body_frame.grid_columnconfigure(0, weight=3)
-        body_frame.grid_columnconfigure(1, weight=1)
-
-        table_container = ctk.CTkFrame(body_frame, fg_color="white", corner_radius=10)
-        table_container.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
-        self.build_table(table_container)
-
-        right_panel = ctk.CTkFrame(body_frame, fg_color="transparent")
-        right_panel.grid(row=0, column=1, sticky="nsew")
-        self.build_active_personnel(right_panel)
-
-        self.build_incident_analytics(right_panel, db_analytics, db_stats)
-
-        self.build_bottom_analytics()
-
-    def create_stat_card(self, parent, title, value, color):
-        card = ctk.CTkFrame(parent, fg_color="white", border_color=color, border_width=1, corner_radius=8, height=100)
-        card.pack(side="left", fill="x", expand=True, padx=5)
-        card.pack_propagate(False)
-        content = ctk.CTkFrame(card, fg_color="transparent")
-        content.place(relx=0.5, rely=0.5, anchor="center")
-        ctk.CTkLabel(content, text=title, font=("Arial", 14, "bold"), text_color=color).pack(pady=(0, 5))
-        ctk.CTkLabel(content, text=value, font=("Arial", 28, "bold"), text_color=color).pack()
-
-    def build_table(self, container):
-        self.current_page, self.items_per_page = 1, 10
-        top_ctrls = ctk.CTkFrame(container, fg_color="white", corner_radius=10)
-        top_ctrls.pack(fill="x", padx=20, pady=15)
-        ctk.CTkLabel(top_ctrls, text="Filter Cases", font=("Arial", 14, "bold"), text_color=self.text_dark).pack(
+        # 1. HEADER WITH PDF EXPORT
+        header_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        header_frame.pack(fill="x", padx=30, pady=(30, 10))
+        ctk.CTkLabel(header_frame, text="📊 Analytics Dashboard", font=("Arial", 28, "bold"), text_color="#1D2153").pack(
             side="left")
 
-        cat_list = ["All Categories"] + self.engine.get_incident_categories()
-        self.filter_category_var = ctk.StringVar(value="All Categories")
-        ctk.CTkOptionMenu(top_ctrls, variable=self.filter_category_var, values=cat_list, fg_color="white",
-                          text_color=self.text_dark, button_color="#F0F0F0", button_hover_color="#E0E0E0", width=140,
-                          height=35, command=lambda e: self.trigger_live_filter(reset_page=True)).pack(side="left",
-                                                                                                       padx=(15, 0))
-
-        self.search_entry = ctk.CTkEntry(top_ctrls, placeholder_text="Search Case ID or Name...", width=280, height=35,
-                                         text_color=self.text_dark)
-        self.search_entry.pack(side="right", padx=(10, 0))
-        self.search_entry.bind("<KeyRelease>", self.delayed_search)
-
-        title_row = ctk.CTkFrame(container, fg_color="#A3AEB5", corner_radius=0, height=45)
-        title_row.pack(fill="x")
-        title_row.pack_propagate(False)
-        ctk.CTkLabel(title_row, text="Recent Blotter Entries", font=("Arial", 16, "bold"), text_color="white").pack(
-            side="left", padx=20)
-
-        self.table_rows_frame = ctk.CTkFrame(container, fg_color="white")
-        self.table_rows_frame.pack(fill="both", expand=True)
-
-        self.pagination_frame = ctk.CTkFrame(container, fg_color="white")
-        self.pagination_frame.pack(fill="x", padx=20, pady=(10, 15))
-        self.btn_prev = ctk.CTkButton(self.pagination_frame, text="< Previous", width=100, fg_color="#F0F0F0",
-                                      text_color=self.text_dark, hover_color="#E0E0E0",
-                                      command=lambda: self.change_page(-1))
-        self.btn_prev.pack(side="left", padx=10)
-        self.lbl_page = ctk.CTkLabel(self.pagination_frame, text="Page 1 of 1", font=("Arial", 12, "bold"),
-                                     text_color=self.text_dark)
-        self.lbl_page.pack(side="left", expand=True)
-        self.btn_next = ctk.CTkButton(self.pagination_frame, text="Next >", width=100, fg_color="#F0F0F0",
-                                      text_color=self.text_dark, hover_color="#E0E0E0",
-                                      command=lambda: self.change_page(1))
-        self.btn_next.pack(side="right", padx=10)
-
-        self.trigger_live_filter(reset_page=True)
-
-    def delayed_search(self, event):
-        if hasattr(self, 'search_timer') and self.search_timer: self.container.after_cancel(self.search_timer)
-        self.search_timer = self.container.after(500, lambda: self.trigger_live_filter(reset_page=True))
-
-    def trigger_live_filter(self, reset_page=True):
-        if reset_page: self.current_page = 1
-        all_data = self.engine.advanced_search_incidents(self.search_entry.get(), self.filter_category_var.get())
-        if not all_data:
-            self.draw_table_rows([])
-            self.lbl_page.configure(text="Page 0 of 0")
-            self.btn_prev.configure(state="disabled")
-            self.btn_next.configure(state="disabled")
-            return
-
-        total_pages = math.ceil(len(all_data) / self.items_per_page)
-        if self.current_page > total_pages: self.current_page = total_pages
-        if self.current_page < 1: self.current_page = 1
-
-        self.draw_table_rows(
-            all_data[(self.current_page - 1) * self.items_per_page: self.current_page * self.items_per_page])
-        self.lbl_page.configure(text=f"Page {self.current_page} of {total_pages}")
-        self.btn_prev.configure(state="normal" if self.current_page > 1 else "disabled")
-        self.btn_next.configure(state="normal" if self.current_page < total_pages else "disabled")
-
-    def change_page(self, direction):
-        self.current_page += direction
-        self.trigger_live_filter(reset_page=False)
-
-    def draw_table_rows(self, data_to_draw):
-        for widget in self.table_rows_frame.winfo_children(): widget.destroy()
-        if not data_to_draw:
-            return ctk.CTkLabel(self.table_rows_frame, text="No records found.", text_color=self.text_muted).pack(
-                pady=20)
-
-        for case in data_to_draw:
-            row = ctk.CTkFrame(self.table_rows_frame, fg_color="white", height=45, cursor="hand2")
-            row.pack(fill="x")
-            row.pack_propagate(False)
-
-            ctk.CTkLabel(row, text=case.get('case_no'), font=("Arial", 12, "bold"), text_color=self.text_dark, width=60,
-                         anchor="w", cursor="hand2").pack(side="left", padx=(20, 0))
-            ctk.CTkLabel(row, text=f"{case.get('category', 'Uncategorized')} (Zone {case.get('zone', 'N/A')})",
-                         font=("Arial", 12), text_color=self.text_dark, width=180, anchor="w", cursor="hand2").pack(
-                side="left", padx=(0, 10))
-            ctk.CTkLabel(row, text=case.get('processed_by'), font=("Arial", 12), text_color=self.text_muted, width=120,
-                         anchor="w", cursor="hand2").pack(side="left")
-            ctk.CTkLabel(row, text=case.get('exact_time'), font=("Arial", 12), text_color=self.text_muted, width=100,
-                         anchor="w", cursor="hand2").pack(side="left")
-
-            status = case.get('status')
-            color = self.green if status == 'Resolved' else (self.red if status == 'Urgent' else self.orange)
-
-            display_status = status
-            if status == "Pending":
-                display_status = "Routine"
-            elif status == "Urgent":
-                display_status = "High Priority"
-
-            ctk.CTkLabel(row, text=display_status, text_color=color,
-                         font=("Arial", 12, "bold"), width=100, anchor="e", cursor="hand2").pack(side="right", padx=20)
-
-            click_command = lambda e, c=case: IncidentDetailsModal(self.container.winfo_toplevel(), c, self.engine,
-                                                                   self.user, self.trigger_live_filter)
-            row.bind("<Button-1>", click_command)
-            for child in row.winfo_children():
-                child.bind("<Button-1>", click_command)
-
-            ctk.CTkFrame(self.table_rows_frame, height=1, fg_color="#F0F0F0").pack(fill="x")
-
-    def build_active_personnel(self, parent):
-        card = ctk.CTkFrame(parent, fg_color="white", border_color="#E0E0E0", border_width=1, corner_radius=8)
-        card.pack(fill="x", pady=(0, 20))
-
-        header = ctk.CTkFrame(card, fg_color=self.sidebar_color, corner_radius=0)
-        header.pack(fill="x")
-        ctk.CTkLabel(header, text="👥 Team Roster & Status", font=("Arial", 14, "bold"), text_color="white").pack(
-            anchor="w", padx=20, pady=10)
-
-        list_frame = ctk.CTkScrollableFrame(card, fg_color="transparent", height=150)
-        list_frame.pack(fill="both", expand=True, padx=10, pady=10)
-        for u in self.engine.get_all_users() or []:
-            row = ctk.CTkFrame(list_frame, fg_color="transparent")
-            row.pack(fill="x", padx=10, pady=5)
-            color = self.green if u.get('status') == 'Active' else (
-                self.red if u.get('status') == 'Blocked' else self.orange)
-            ctk.CTkLabel(row, text="●", text_color=color, font=("Arial", 14)).pack(side="left", padx=(0, 10))
-            txt_frame = ctk.CTkFrame(row, fg_color="transparent")
-            txt_frame.pack(side="left")
-            ctk.CTkLabel(txt_frame, text=f"{u.get('first_name', '')} {u.get('last_name', '')}",
-                         font=("Arial", 12, "bold"), text_color=self.text_dark).pack(anchor="w", pady=0)
-            ctk.CTkLabel(txt_frame, text=f"{u.get('role')} | {u.get('status')}", font=("Arial", 10),
-                         text_color=self.text_muted).pack(anchor="w", pady=0)
-
-    def build_incident_analytics(self, parent, data, stats):
-        card = ctk.CTkFrame(parent, fg_color="white", border_color="#E0E0E0", border_width=1, corner_radius=8)
-        card.pack(fill="x")
-
-        header = ctk.CTkFrame(card, fg_color=self.sidebar_color, corner_radius=0)
-        header.pack(fill="x")
-        ctk.CTkLabel(header, text="📊 Analytics & Trends", font=("Arial", 14, "bold"), text_color="white").pack(
-            anchor="w", padx=20, pady=10)
-
-        info_frame = ctk.CTkFrame(card, fg_color="transparent")
-        info_frame.pack(fill="x", padx=20, pady=15)
-        ctk.CTkLabel(info_frame, text=f"🔥 Hotspot Zone: {data.get('hotspot', 'N/A')}", font=("Arial", 12, "bold"),
-                     text_color=self.red).pack(anchor="w", pady=(0, 5))
-        ctk.CTkLabel(info_frame, text=f"🕒 Peak Hours: {data.get('peak_hours', 'N/A')}", font=("Arial", 12, "bold"),
-                     text_color=self.text_dark).pack(anchor="w")
-
-        ctk.CTkFrame(card, height=1, fg_color="#E0E0E0").pack(fill="x", padx=20)
-
-        chart_frame = ctk.CTkFrame(card, fg_color="transparent")
-        chart_frame.pack(fill="x", padx=20, pady=15)
-        ctk.CTkLabel(chart_frame, text="Case Distribution", font=("Arial", 12, "bold"),
-                     text_color=self.text_muted).pack(anchor="w", pady=(0, 10))
-
-        total = stats.get('Total Cases', 1)
-        if total == 0: total = 1
-
-        self.create_mini_bar(chart_frame, "Resolved", stats.get('Resolved', 0), total, self.green)
-        self.create_mini_bar(chart_frame, "Routine", stats.get('Pending', 0), total, self.orange)
-        self.create_mini_bar(chart_frame, "High Prio", stats.get('Urgent', 0), total, self.red)
-
-    def create_mini_bar(self, parent, label, value, total, color):
-        row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", pady=6)
-
-        ctk.CTkLabel(row, text=label, font=("Arial", 11, "bold"), width=75, anchor="w", text_color=self.text_dark).pack(
-            side="left")
-
-        progress = ctk.CTkProgressBar(row, height=12, progress_color=color, fg_color="#EBEBEB")
-        progress.pack(side="left", fill="x", expand=True, padx=10)
-        progress.set(value / total)
-
-        ctk.CTkLabel(row, text=str(value), font=("Arial", 11, "bold"), text_color=color, width=20, anchor="e").pack(
-            side="right")
-
-    def build_bottom_analytics(self):
-        report_frame = ctk.CTkFrame(self.scroll_container, fg_color="white", corner_radius=15, border_color="#E0E0E0",
-                                    border_width=1)
-        report_frame.pack(fill="x", padx=30, pady=(0, 30))
-
-        top_ctrl = ctk.CTkFrame(report_frame, fg_color="transparent")
-        top_ctrl.pack(fill="x", padx=25, pady=(20, 15))
-
-        ctk.CTkLabel(top_ctrl, text="📑 Comprehensive Report", font=("Arial", 20, "bold"),
-                     text_color=self.sidebar_color).pack(side="left")
+        export_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        export_frame.pack(side="right")
 
         self.report_timeframe = ctk.StringVar(value="This Month")
-        dropdown = ctk.CTkOptionMenu(top_ctrl, variable=self.report_timeframe,
-                                     values=["This Week", "This Month", "This Year", "All Time"],
-                                     fg_color=self.sidebar_color, text_color="white", button_color="#2C3E50",
-                                     command=lambda e: self.update_report_ui())
-        dropdown.pack(side="left", padx=20)
+        ctk.CTkOptionMenu(export_frame, variable=self.report_timeframe,
+                          values=["This Week", "This Month", "This Year", "All Time"], fg_color="#1D2153").pack(
+            side="left", padx=10)
 
-        ctk.CTkButton(top_ctrl, text="🖨️ Generate PDF Report", fg_color=self.green, hover_color="#1E8449",
-                      font=("Arial", 12, "bold"), height=35,
+        ctk.CTkButton(export_frame, text="🖨️ Export PDF", fg_color="#27AE60", hover_color="#1E8449",
                       command=lambda: PDFGenerator.export_analytics(
                           self.engine.get_timeframe_analytics(self.report_timeframe.get()),
-                          self.report_timeframe.get())).pack(side="right")
+                          self.report_timeframe.get())).pack(side="left")
 
-        self.info_cards_container = ctk.CTkFrame(report_frame, fg_color="transparent")
-        self.info_cards_container.pack(fill="x", padx=20, pady=(0, 25))
-        self.info_cards_container.grid_columnconfigure((0, 1, 2), weight=1)
+        # 2. THE STAT CARDS
+        self.build_stat_cards(self.container)
 
-        self.card_total = self.create_infograph_card(self.info_cards_container, 0, "Total Files", "0", "📁", "#34495E")
-        self.card_resolved = self.create_infograph_card(self.info_cards_container, 1, "Resolved", "0", "✅", self.green,
-                                                        has_progress=True)
-        self.card_top = self.create_infograph_card(self.info_cards_container, 2, "Top Issue", "N/A", "🔥", self.red)
+        if not MATPLOTLIB_AVAILABLE:
+            error_frame = ctk.CTkFrame(self.container, fg_color="#FADBD8", corner_radius=10)
+            error_frame.pack(fill="x", padx=30, pady=20)
+            ctk.CTkLabel(error_frame,
+                         text="⚠️ Matplotlib is missing! Please run 'pip install matplotlib' in your terminal.",
+                         text_color="#C0392B", font=("Arial", 14, "bold")).pack(pady=20)
+            return
 
-        self.update_report_ui()
+        # 3. TOP ROW CHARTS
+        top_row = ctk.CTkFrame(self.container, fg_color="transparent")
+        top_row.pack(fill="x", padx=25, pady=10)
+        top_row.grid_columnconfigure((0, 1), weight=1)
 
-    def create_infograph_card(self, parent, col, title, val, icon, color, has_progress=False):
-        card = ctk.CTkFrame(parent, fg_color="#F8F9FA", corner_radius=12, height=120)
-        card.grid(row=0, column=col, padx=10, sticky="nsew")
+        self.setup_donut_section(top_row)
+        self.setup_monthly_section(top_row)
+
+        # 4. BOTTOM ROW CHARTS
+        bottom_row = ctk.CTkFrame(self.container, fg_color="transparent")
+        bottom_row.pack(fill="x", padx=25, pady=20)
+
+        self.setup_peak_hours_section(bottom_row)
+
+    # ==========================================
+    # STAT CARDS UI LOGIC
+    # ==========================================
+    def build_stat_cards(self, parent):
+        stats_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        stats_frame.pack(fill="x", padx=25, pady=(0, 15))
+
+        stats = self.engine.get_dashboard_stats()
+
+        # 🚀 POGI UPDATE: Updated Labels ("Normal" at "High Priority")
+        self.create_stat_card(stats_frame, "Total Cases", str(stats.get('Total Cases', 0)), "📋", "#E74C3C")
+        self.create_stat_card(stats_frame, "Resolved", str(stats.get('Resolved', 0)), "✅", "#27AE60")
+        self.create_stat_card(stats_frame, "Normal", str(stats.get('Pending', 0)), "⏳", "#F39C12")
+        self.create_stat_card(stats_frame, "High Priority", str(stats.get('Urgent', 0)), "🚨", "#1D2153")
+
+    def create_stat_card(self, parent, title, value, icon, color):
+        card = ctk.CTkFrame(parent, fg_color="white", border_color=color, border_width=1, corner_radius=8, height=80)
+        card.pack(side="left", fill="x", expand=True, padx=5)
         card.pack_propagate(False)
 
-        header = ctk.CTkFrame(card, fg_color="transparent")
-        header.pack(fill="x", padx=15, pady=(15, 0))
+        icon_lbl = ctk.CTkLabel(card, text=icon, font=("Arial", 36))
+        icon_lbl.place(relx=0.15, rely=0.5, anchor="center")
 
-        ctk.CTkLabel(header, text=icon, font=("Arial", 20)).pack(side="left")
-        ctk.CTkLabel(header, text=title, font=("Arial", 13, "bold"), text_color=self.text_muted).pack(side="left",
-                                                                                                      padx=10)
+        text_frame = ctk.CTkFrame(card, fg_color="transparent")
+        text_frame.place(relx=0.85, rely=0.5, anchor="e")
 
-        val_lbl = ctk.CTkLabel(card, text=val, font=("Arial", 22, "bold"), text_color=color)
-        val_lbl.pack(anchor="w", padx=20, pady=(5, 0))
+        ctk.CTkLabel(text_frame, text=title, font=("Arial", 12, "bold"), text_color=color).pack(anchor="e")
+        ctk.CTkLabel(text_frame, text=value, font=("Arial", 28, "bold"), text_color=color).pack(anchor="e", pady=(2, 0))
 
-        progress = None
-        if has_progress:
-            progress = ctk.CTkProgressBar(card, height=8, progress_color=color, fg_color="#E0E0E0")
-            progress.pack(fill="x", padx=20, pady=(10, 0))
-            progress.set(0)
+    # ==========================================
+    # LOGIC: REFRESHING THE CHARTS (REAL-TIME)
+    # ==========================================
+    def update_donut(self, choice):
+        filtered = self.all_incidents if choice == "All Category" else [r for r in self.all_incidents if
+                                                                        r.get('category') == choice]
+        self.draw_donut(filtered)
 
-        return {"val_lbl": val_lbl, "progress": progress}
-
-    def update_report_ui(self):
-        data = self.engine.get_timeframe_analytics(self.report_timeframe.get())
-
-        self.card_total["val_lbl"].configure(text=str(data['total']))
-
-        self.card_resolved["val_lbl"].configure(text=str(data['resolved']))
-        if data['total'] > 0:
-            rate = data['resolved'] / data['total']
-            self.card_resolved["progress"].set(rate)
+    def update_monthly(self, choice):
+        current_year = datetime.now().year
+        if choice == "This Year":
+            filtered = [r for r in self.all_incidents if
+                        str(r.get('date_of_incident') or "").startswith(str(current_year))]
         else:
-            self.card_resolved["progress"].set(0)
+            filtered = self.all_incidents
+        self.draw_monthly(filtered)
 
-        top_text = data['top_category']
-        if len(top_text) > 18: top_text = top_text[:15] + "..."
-        self.card_top["val_lbl"].configure(text=top_text)
+    def update_peak(self, choice):
+        if choice == "AM":
+            filtered = [r for r in self.all_incidents if "AM" in str(r.get('exact_time'))]
+        elif choice == "PM":
+            filtered = [r for r in self.all_incidents if "PM" in str(r.get('exact_time'))]
+        else:
+            filtered = self.all_incidents
+        self.draw_peak(filtered)
+
+    # ==========================================
+    # DONUT CHART SETUP & DRAW
+    # ==========================================
+    def setup_donut_section(self, parent):
+        self.donut_card = ctk.CTkFrame(parent, fg_color="white", corner_radius=15, border_width=1,
+                                       border_color="#E0E0E0")
+        self.donut_card.grid(row=0, column=0, padx=10, sticky="nsew")
+
+        top = ctk.CTkFrame(self.donut_card, fg_color="transparent")
+        top.pack(fill="x", padx=20, pady=20)
+        ctk.CTkLabel(top, text="🕒 Complaint Distribution", font=("Arial", 16, "bold"), text_color=self.text_dark).pack(
+            anchor="w")
+
+        cats = ["All Category"] + self.engine.get_incident_categories()
+        ctk.CTkComboBox(top, values=cats, command=self.update_donut, width=150, fg_color="white",
+                        text_color="black").pack(anchor="w", pady=(10, 0))
+
+        self.donut_plot_cont = ctk.CTkFrame(self.donut_card, fg_color="transparent")
+        self.donut_plot_cont.pack(fill="both", expand=True)
+        self.draw_donut(self.all_incidents)
+
+    def draw_donut(self, data):
+        for w in self.donut_plot_cont.winfo_children(): w.destroy()
+
+        counts = Counter([r.get('category', 'Uncategorized') for r in data if r.get('category')])
+        if not counts: return ctk.CTkLabel(self.donut_plot_cont, text="No Data Available", text_color="gray").pack(
+            pady=50)
+
+        labels = list(counts.keys())[:3]
+        sizes = [counts[k] for k in labels]
+        colors = [self.chart_cyan, self.chart_blue, self.chart_dark_blue]
+
+        fig = Figure(figsize=(4, 3.5), dpi=100)
+        fig.patch.set_facecolor('white')
+        ax = fig.add_subplot(111)
+
+        wedges, _ = ax.pie(sizes, colors=colors, startangle=90, wedgeprops=dict(width=0.5, edgecolor='w'))
+        ax.axis('equal')
+        ax.legend(wedges, labels, loc="lower center", bbox_to_anchor=(0.5, -0.1), ncol=3, frameon=False)
+
+        canvas = FigureCanvasTkAgg(fig, master=self.donut_plot_cont)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+    # ==========================================
+    # MONTHLY TREND CHART SETUP & DRAW
+    # ==========================================
+    def setup_monthly_section(self, parent):
+        self.monthly_card = ctk.CTkFrame(parent, fg_color="white", corner_radius=15, border_width=1,
+                                         border_color="#E0E0E0")
+        self.monthly_card.grid(row=0, column=1, padx=10, sticky="nsew")
+
+        top = ctk.CTkFrame(self.monthly_card, fg_color="transparent")
+        top.pack(fill="x", padx=20, pady=20)
+        ctk.CTkLabel(top, text="📈 Monthly Complaint Trend", font=("Arial", 16, "bold"), text_color=self.text_dark).pack(
+            anchor="w")
+
+        ctk.CTkComboBox(top, values=["All Months", "This Year"], command=self.update_monthly, width=150,
+                        fg_color="white", text_color="black").pack(anchor="w", pady=(10, 0))
+
+        self.monthly_plot_cont = ctk.CTkFrame(self.monthly_card, fg_color="transparent")
+        self.monthly_plot_cont.pack(fill="both", expand=True)
+        self.draw_monthly(self.all_incidents)
+
+    def draw_monthly(self, data):
+        for w in self.monthly_plot_cont.winfo_children(): w.destroy()
+
+        months = []
+        for r in data:
+            d = r.get('date_of_incident') or r.get('created_at')
+            if d: months.append(d.strftime("%b") if not isinstance(d, str) else d)
+
+        counts = Counter(months)
+        if not counts: return ctk.CTkLabel(self.monthly_plot_cont, text="No Data Available", text_color="gray").pack(
+            pady=50)
+
+        fig = Figure(figsize=(4, 3.5), dpi=100)
+        fig.patch.set_facecolor('white')
+        ax = fig.add_subplot(111)
+
+        ax.bar(list(counts.keys())[:4], list(counts.values())[:4], color=self.chart_cyan, width=0.7)
+        ax.spines[['top', 'right', 'left']].set_visible(False)
+        ax.yaxis.grid(True, color='#E0E0E0', linestyle='-', linewidth=0.5)
+        ax.set_axisbelow(True)
+        ax.tick_params(axis='both', which='both', length=0, labelsize=9, colors='gray')
+
+        # 🚀 POGI UPDATE: Whole Numbers Only!
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+        canvas = FigureCanvasTkAgg(fig, master=self.monthly_plot_cont)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
+
+    # ==========================================
+    # PEAK HOURS CHART SETUP & DRAW
+    # ==========================================
+    def setup_peak_hours_section(self, parent):
+        self.peak_card = ctk.CTkFrame(parent, fg_color="white", corner_radius=15, border_width=1,
+                                      border_color="#E0E0E0")
+        self.peak_card.pack(fill="x", padx=10)
+
+        top = ctk.CTkFrame(self.peak_card, fg_color="transparent")
+        top.pack(fill="x", padx=20, pady=20)
+        ctk.CTkLabel(top, text="🕒 Peak Complaint Hours", font=("Arial", 16, "bold"), text_color=self.text_dark).pack(
+            anchor="w")
+
+        ctk.CTkComboBox(top, values=["Time", "AM", "PM"], command=self.update_peak, width=150, fg_color="white",
+                        text_color="black").pack(anchor="w", pady=(10, 0))
+
+        self.peak_plot_cont = ctk.CTkFrame(self.peak_card, fg_color="transparent")
+        self.peak_plot_cont.pack(fill="both", expand=True)
+        self.draw_peak(self.all_incidents)
+
+    def draw_peak(self, data):
+        for w in self.peak_plot_cont.winfo_children(): w.destroy()
+
+        hours = []
+        for r in data:
+            t_str = r.get('exact_time')
+            if t_str:
+                try:
+                    hours.append(datetime.strptime(t_str, "%I:%M %p").strftime("%I %p").lstrip("0"))
+                except:
+                    pass
+
+        counts = Counter(hours)
+        if not counts: return ctk.CTkLabel(self.peak_plot_cont, text="No Data Available", text_color="gray").pack(
+            pady=30)
+
+        top_hours = counts.most_common(4)
+        labels = [h[0] for h in top_hours]
+        values = [h[1] for h in top_hours]
+
+        fig = Figure(figsize=(10, 3.5), dpi=100)
+        fig.patch.set_facecolor('white')
+        ax = fig.add_subplot(111)
+
+        ax.barh(labels, values, color=self.chart_blue, height=0.7)
+        ax.invert_yaxis()
+        ax.spines[['top', 'right', 'bottom', 'left']].set_visible(False)
+        ax.xaxis.grid(True, color='#E0E0E0', linestyle='-', linewidth=0.5)
+        ax.set_axisbelow(True)
+        ax.tick_params(axis='both', which='both', length=0, labelsize=9, colors='gray')
+
+        # 🚀 POGI UPDATE: Whole Numbers Only!
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+        canvas = FigureCanvasTkAgg(fig, master=self.peak_plot_cont)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=(0, 20))
