@@ -1,5 +1,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
+from PIL import Image
+import os
 
 
 class TeamManagementPage:
@@ -61,9 +63,26 @@ class TeamManagementPage:
         role = user.get('role', 'Staff')
         status = user.get('status', 'Active')
 
-        avatar = ctk.CTkLabel(card, text=fname[0] if fname else "?", font=("Arial", 16, "bold"), width=40, height=40,
-                              fg_color="#E8EAF6", text_color=self.blue, corner_radius=20)
-        avatar.pack(side="left", padx=15, pady=10)
+        # 🚀 POGI UPDATE: FETCHING THE PROFILE PICTURE!
+        pic_path = user.get('profile_pic')
+        avatar_img = None
+
+        if pic_path and os.path.exists(pic_path):
+            try:
+                img = Image.open(pic_path)
+                avatar_img = ctk.CTkImage(light_image=img, size=(40, 40))
+            except Exception as e:
+                print(f"Error loading profile pic for {fname}: {e}")
+
+        # Kung may na-load na picture, yun ang i-display. Kung wala, First Letter!
+        if avatar_img:
+            avatar = ctk.CTkLabel(card, text="", image=avatar_img, width=40, height=40)
+            avatar.pack(side="left", padx=15, pady=10)
+        else:
+            avatar = ctk.CTkLabel(card, text=fname[0] if fname else "?", font=("Arial", 16, "bold"), width=40,
+                                  height=40,
+                                  fg_color="#E8EAF6", text_color=self.blue, corner_radius=20)
+            avatar.pack(side="left", padx=15, pady=10)
 
         info_frame = ctk.CTkFrame(card, fg_color="transparent")
         info_frame.pack(side="left", padx=5)
@@ -83,7 +102,6 @@ class TeamManagementPage:
         popup = ctk.CTkToplevel(self.root)
         popup.title(f"Manage User - {user.get('first_name', '')}")
 
-        # 🚀 POGI UPDATE: THE CENTERING MATH!
         window_width = 450
         window_height = 700
         screen_width = popup.winfo_screenwidth()
@@ -99,12 +117,23 @@ class TeamManagementPage:
         perf_frame.pack(fill="x")
 
         full_name = f"{user.get('first_name', '')} {user.get('last_name', '')}"
+
+        # 🚀 POGI UPDATE: Idinagdag natin yung Profile Pic sa loob din ng Popup!
+        pic_path = user.get('profile_pic')
+        if pic_path and os.path.exists(pic_path):
+            try:
+                img = Image.open(pic_path)
+                popup_img = ctk.CTkImage(light_image=img, size=(60, 60))
+                ctk.CTkLabel(perf_frame, text="", image=popup_img).pack(pady=(15, 0))
+            except Exception:
+                pass
+
         stats = self.engine.get_user_performance_stats(full_name)
         handled = stats.get('handled', 0)
         resolved = stats.get('resolved', 0)
 
         ctk.CTkLabel(perf_frame, text=f"Performance: {full_name}", font=("Arial", 16, "bold"), text_color="white").pack(
-            pady=(20, 5))
+            pady=(10, 5))
         ctk.CTkLabel(perf_frame, text=f"Total Cases Handled: {handled}  |  Successfully Resolved: {resolved}",
                      font=("Arial", 11), text_color="white").pack(pady=(0, 20))
 
@@ -115,14 +144,15 @@ class TeamManagementPage:
             ctk.CTkLabel(scroll_frame, text=label_text, font=("Arial", 11, "bold")).pack(anchor="w", pady=(10, 2))
             entry = ctk.CTkEntry(scroll_frame, height=35, font=("Arial", 12))
             entry.pack(fill="x")
-            if default_val: entry.insert(0, default_val)
+            if default_val is not None:
+                entry.insert(0, str(default_val))
             if is_disabled: entry.configure(state="disabled", fg_color="#F0F0F0")
             return entry
 
         fname_entry = create_field("First Name", user.get('first_name'))
         lname_entry = create_field("Last Name", user.get('last_name'))
         emp_entry = create_field("Employee ID", user.get('employee_id'))
-        rfid_entry = create_field("RFID Code", user.get('rfid_code'))
+        rfid_entry = create_field("RFID Code (Optional)", user.get('rfid_code'))
         pwd_entry = create_field("Password", user.get('password'))
 
         original_password = user.get('password')
@@ -173,33 +203,38 @@ class TeamManagementPage:
             new_pwd = pwd_entry.get().strip()
             role_val = role_var.get()
             stat_val = stat_var.get()
-            new_rfid = rfid_entry.get().strip()
+
+            rfid_input = rfid_entry.get().strip()
+            new_rfid = rfid_input if rfid_input != "" else None
+
             s_val = susp_val_entry.get() if stat_val == "Suspended" else 0
             s_type = susp_type_var.get()
 
-            success = self.engine.update_user_account(user['id'], fname, lname, emp_id, new_pwd, role_val, stat_val,
-                                                      new_rfid, s_val, s_type)
-            if success:
-                if new_pwd != original_password:
-                    try:
-                        admin_name = "Admin/Kapitan"
-                        if hasattr(self.parent.winfo_toplevel(), "title"):
-                            admin_name = "System Admin"
+            try:
+                success = self.engine.update_user_account(user['id'], fname, lname, emp_id, new_pwd, role_val, stat_val,
+                                                          new_rfid, s_val, s_type)
+                if success:
+                    if new_pwd != original_password:
+                        try:
+                            admin_name = "Admin/Kapitan"
+                            if hasattr(self.parent.winfo_toplevel(), "title"):
+                                admin_name = "System Admin"
 
-                        # 🚀 THE POGI FIX: Ginamit na natin yung 'emp_id' imbes na user['id']!
-                        self.engine.log_security_event(
-                            user_id=emp_id,
-                            action="FORCED PASSWORD RESET",
-                            details=f"VIA ADMIN REQUEST: {admin_name} directly changed the password for {fname} {lname} ({role_val})."
-                        )
-                    except Exception as e:
-                        print(f"Failed to log forced reset: {e}")
+                            self.engine.log_security_event(
+                                user_id=emp_id,
+                                action="FORCED PASSWORD RESET",
+                                details=f"VIA ADMIN REQUEST: {admin_name} directly changed the password for {fname} {lname} ({role_val})."
+                            )
+                        except Exception as e:
+                            print(f"Failed to log forced reset: {e}")
 
-                messagebox.showinfo("Success", "User account successfully updated!")
-                popup.destroy()
-                self.load_users()
-            else:
-                messagebox.showerror("Error", "Failed to update user. Check database connection.")
+                    messagebox.showinfo("Success", "User account successfully updated!")
+                    popup.destroy()
+                    self.load_users()
+                else:
+                    messagebox.showerror("Error", "Failed to update user. Duplicate RFID or Database error.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Something went wrong: {e}")
 
         ctk.CTkButton(scroll_frame, text="Save Changes", fg_color=self.primary, hover_color=self.dark_green,
                       font=("Arial", 14, "bold"), height=45, command=save_changes).pack(pady=30)
