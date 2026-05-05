@@ -3,7 +3,6 @@ from tkinter import messagebox
 import os
 from PIL import Image
 
-
 class AdminDashboardWindow:
     def __init__(self, engine, user_data, parent_dashboard=None):
         self.engine = engine
@@ -12,7 +11,7 @@ class AdminDashboardWindow:
 
         self.window = ctk.CTkToplevel()
         self.window.title("BICRS - Kapitan Control Center")
-        self.window.state('zoomed')  # Safe against Alt+Tab bug
+        self.window.state('zoomed')
         self.window.bind("<Key>", self.handle_shortcuts)
         self.window.configure(fg_color="#F4F7F6")
 
@@ -33,14 +32,14 @@ class AdminDashboardWindow:
         self.window.protocol("WM_DELETE_WINDOW", self.force_logout_on_close)
 
         self.setup_layout()
-        self.show_master_dashboard()
+        # Matic load ang Analytics pag-open!
+        self.show_analytics_dashboard()
 
     def setup_layout(self):
         self.sidebar = ctk.CTkFrame(self.window, width=250, corner_radius=0, fg_color="#2C3E50")
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
-        # 🚀 POGI UPDATE: Logo Integration para kay Kapitan!
         logo_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         logo_frame.pack(pady=(30, 20), padx=20, fill="x")
 
@@ -75,10 +74,16 @@ class AdminDashboardWindow:
         ctk.CTkLabel(self.sidebar, text="KAPITAN", font=("Arial", 10, "bold"), text_color=self.primary).pack(
             pady=(0, 30))
 
-        self.btn_master = ctk.CTkButton(self.sidebar, text="📁 Master Dashboard", font=("Arial", 14, "bold"),
+        # SIDEBAR BUTTONS
+        self.btn_analytics = ctk.CTkButton(self.sidebar, text="📊 Analytics", font=("Arial", 14, "bold"),
                                         fg_color="transparent", text_color="white", hover_color=self.dark_green,
-                                        anchor="w", command=self.show_master_dashboard)
-        self.btn_master.pack(fill="x", padx=15, pady=5)
+                                        anchor="w", command=self.show_analytics_dashboard)
+        self.btn_analytics.pack(fill="x", padx=15, pady=5)
+
+        self.btn_archives = ctk.CTkButton(self.sidebar, text="🗄️ Case Archives", font=("Arial", 14, "bold"),
+                                        fg_color="transparent", text_color="white", hover_color=self.dark_green,
+                                        anchor="w", command=self.show_archives_page)
+        self.btn_archives.pack(fill="x", padx=15, pady=5)
 
         self.btn_team = ctk.CTkButton(self.sidebar, text="👥 Team Management", font=("Arial", 14, "bold"),
                                       fg_color="transparent", text_color="white", hover_color=self.dark_green,
@@ -112,28 +117,44 @@ class AdminDashboardWindow:
             widget.destroy()
 
     def set_active_tab(self, tab_name):
-        self.btn_master.configure(fg_color=self.primary if tab_name == "master" else "transparent")
+        self.btn_analytics.configure(fg_color=self.primary if tab_name == "analytics" else "transparent")
+        self.btn_archives.configure(fg_color=self.primary if tab_name == "archives" else "transparent")
         self.btn_team.configure(fg_color=self.primary if tab_name == "users" else "transparent")
         self.btn_logs.configure(fg_color=self.primary if tab_name == "logs" else "transparent")
         self.btn_alerts.configure(fg_color=self.primary if tab_name == "alerts" else "transparent")
         self.btn_maintenance.configure(fg_color=self.primary if tab_name == "maintenance" else "transparent")
 
     # ==========================================
-    # ROUTING PAGES (MODULARIZED NA LAHAT!)
+    # ROUTING PAGES
     # ==========================================
-    def show_master_dashboard(self):
+    def show_analytics_dashboard(self):
         self.clear_main_frame()
-        self.set_active_tab("master")
+        self.set_active_tab("analytics")
         try:
-            from master_dashboard_page import MasterDashboardPage
-            MasterDashboardPage(self.main_frame, self.engine, self.window)
+            from overview_page import OverviewPage
+            OverviewPage(self.main_frame, self.engine, self.user)
         except ImportError:
             try:
-                from bircs_package.master_dashboard_page import MasterDashboardPage
-                MasterDashboardPage(self.main_frame, self.engine, self.window)
+                from bircs_package.overview_page import OverviewPage
+                OverviewPage(self.main_frame, self.engine, self.user)
             except ImportError:
-                from .master_dashboard_page import MasterDashboardPage
-                MasterDashboardPage(self.main_frame, self.engine, self.window)
+                from .overview_page import OverviewPage
+                OverviewPage(self.main_frame, self.engine, self.user)
+
+    # 🚀 THE FIX: Dito na natin tinawag yung "kapitan_archives_page"
+    def show_archives_page(self):
+        self.clear_main_frame()
+        self.set_active_tab("archives")
+        try:
+            from kapitan_archives_page import KapitanArchivesPage
+            KapitanArchivesPage(self.main_frame, self.engine, self.user)
+        except ImportError:
+            try:
+                from bircs_package.kapitan_archives_page import KapitanArchivesPage
+                KapitanArchivesPage(self.main_frame, self.engine, self.user)
+            except ImportError:
+                from .kapitan_archives_page import KapitanArchivesPage
+                KapitanArchivesPage(self.main_frame, self.engine, self.user)
 
     def show_user_management(self):
         self.clear_main_frame()
@@ -217,12 +238,16 @@ class AdminDashboardWindow:
 
         key = event.char.lower()
         if key == '1':
-            self.show_master_dashboard()
+            self.show_analytics_dashboard()
         elif key == '2':
-            self.show_user_management()
+            self.show_archives_page()
         elif key == '3':
-            self.show_login_logs()
+            self.show_user_management()
         elif key == '4':
+            self.show_login_logs()
+        elif key == '5':
             self.show_security_alerts()
+        elif key == '6':
+            self.show_system_maintenance()
         elif key == 'l':
             self.lock_and_exit()
