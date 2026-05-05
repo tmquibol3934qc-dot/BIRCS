@@ -8,6 +8,7 @@ from PIL import Image
 from .overview_page import OverviewPage
 from .incident_blotter import IncidentBlotterPage
 from .resolution_page import ResolutionPage
+from .archive_page import ArchivesPage  # 🚀 POGI UPDATE: Bagong import para sa Archives!
 
 
 class DashboardWindow:
@@ -60,7 +61,6 @@ class DashboardWindow:
         logo_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
         logo_frame.pack(pady=(30, 20), padx=20, fill="x")
 
-        # 🚀 POGI UPDATE: Logo Integration!
         try:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             logo_path = os.path.join(current_dir, 'logo.jpg')
@@ -91,9 +91,11 @@ class DashboardWindow:
             pady=(0, 5))
         ctk.CTkLabel(sidebar, text=self.user_role.upper(), font=("Arial", 10), text_color=self.green).pack(pady=(0, 20))
 
-        self.nav_buttons["dashboard"] = self.create_nav_btn(sidebar, "📁 Dashboard", self.show_overview_page)
+        # 🚀 POGI UPDATE: Idinagdag ang Archives at inayos ang labels!
+        self.nav_buttons["dashboard"] = self.create_nav_btn(sidebar, "📊 Analytics", self.show_overview_page)
         self.nav_buttons["blotter"] = self.create_nav_btn(sidebar, "📄 Incident Blotter", self.show_blotter_page)
         self.nav_buttons["resolution"] = self.create_nav_btn(sidebar, "⚖️ Resolution", self.show_resolution_page)
+        self.nav_buttons["archives"] = self.create_nav_btn(sidebar, "🗄️ Archives", self.show_archives_page)
 
     def create_nav_btn(self, parent, text, command=None):
         btn = ctk.CTkButton(parent, text=f"  {text}", fg_color="transparent", text_color="white", hover_color="#2C3E50",
@@ -119,7 +121,6 @@ class DashboardWindow:
 
     # --- PROFILE PANEL ---
     def create_profile_panel(self):
-        # 1. KUNIN ANG IMAGE PATH SA DATABASE
         img_path = self.user.get('profile_pic', '')
         has_image = False
 
@@ -127,7 +128,6 @@ class DashboardWindow:
             try:
                 pil_image = Image.open(img_path)
                 self.btn_img = ctk.CTkImage(pil_image, size=(30, 30))
-                # Mas pinalaki natin yung picture sa panel (100x100)
                 self.panel_img = ctk.CTkImage(pil_image, size=(100, 100))
                 has_image = True
             except Exception as e:
@@ -136,7 +136,6 @@ class DashboardWindow:
         btn_text = "" if has_image else "👤"
         btn_image = self.btn_img if has_image else None
 
-        # 2. ANG PROFILE BUTTON SA TOP-RIGHT
         self.profile_btn = ctk.CTkButton(
             self.window, text=btn_text, image=btn_image, width=45, height=45, corner_radius=22,
             fg_color="white", text_color=self.sidebar_color, border_width=1, border_color="#E0E0E0",
@@ -145,7 +144,6 @@ class DashboardWindow:
         )
         self.profile_btn.place(relx=0.98, rely=0.02, anchor="ne")
 
-        # 3. ANG DROP-DOWN PANEL
         self.account_panel = ctk.CTkFrame(self.window, width=250, corner_radius=10, fg_color="white", border_width=1,
                                           border_color="#E0E0E0")
         self.panel_visible = False
@@ -169,7 +167,6 @@ class DashboardWindow:
                                                                                                       rely=0.5,
                                                                                                       anchor="center")
 
-        # 4. USER DETAILS Lined up perfectly
         details_frame = ctk.CTkFrame(self.account_panel, fg_color="transparent")
         details_frame.pack(fill="x", pady=10)
 
@@ -192,7 +189,6 @@ class DashboardWindow:
                                         text_color=self.green)
         self.timer_label.pack(pady=10)
 
-        # Buttons
         ctk.CTkButton(self.account_panel, text="🔑 Kapitan Access", fg_color="transparent", text_color=self.orange,
                       hover_color="#FFF3E0", font=("Arial", 12, "bold"), command=self.prompt_admin_access).pack(
             fill="x", padx=10, pady=2)
@@ -203,12 +199,11 @@ class DashboardWindow:
 
     def toggle_profile_panel(self):
         if self.panel_visible:
-            self.account_panel.place_forget();
+            self.account_panel.place_forget()
             self.panel_visible = False
         else:
-            self.account_panel.place(relx=0.98, rely=0.08,
-                                     anchor="ne");
-            self.account_panel.lift();
+            self.account_panel.place(relx=0.98, rely=0.08, anchor="ne")
+            self.account_panel.lift()
             self.panel_visible = True
 
     def update_timer(self):
@@ -244,6 +239,16 @@ class DashboardWindow:
             self.page_cache["resolution"] = container
         self.page_cache["resolution"].pack(fill="both", expand=True)
 
+    # 🚀 POGI UPDATE: Bagong logic para ipakita ang Archives
+    def show_archives_page(self):
+        self.hide_all_pages()
+        self.set_active_tab("archives")
+        if "archives" not in self.page_cache:
+            container = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+            ArchivesPage(container, self.engine, self.user)
+            self.page_cache["archives"] = container
+        self.page_cache["archives"].pack(fill="both", expand=True)
+
     # --- ADMIN / LOGOUT ---
     def prompt_admin_access(self):
         scanned_rfid = ctk.CTkInputDialog(text="Scan Kapitan RFID:", title="Auth").get_input()
@@ -257,7 +262,6 @@ class DashboardWindow:
                 messagebox.showerror("Access Denied", "Invalid RFID.")
 
     def restore_dashboard(self):
-        """Ibinabalik ang Main Dashboard kapag nag-exit na si Kapitan sa Admin Panel"""
         self.window.deiconify()
         self.window.state('zoomed')
 
@@ -280,6 +284,8 @@ class DashboardWindow:
             self.show_blotter_page()
         elif key == '3':
             self.show_resolution_page()
+        elif key == '4':
+            self.show_archives_page()  # 🚀 Added Shortcut for Archives!
         elif key == 'k' and hasattr(self, 'toggle_profile_panel'):
             self.prompt_admin_access()
         elif key == 'l':
