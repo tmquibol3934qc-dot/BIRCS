@@ -6,29 +6,42 @@ import re
 class SecurityAlertsPage:
     def __init__(self, parent_frame, engine):
         self.engine = engine
-        self.primary = "#27AE60"
-        self.red = "#E74C3C"
-        self.text_dark = "#2B2B2B"
-        self.text_muted = "#7A7A7A"
-        self.bg_color = "#F4F7F6"
 
-        self.page_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        # 🎨 THE PREMIUM WEB PALETTE
+        self.color_sidebar = "#1D2153"  # Deep Navy
+        self.color_bg = "#F4F6F7"  # Web Canvas Gray
+        self.color_card = "#FFFFFF"  # Crisp White
+        self.color_border = "#EAECEE"  # Subtle borders
+        self.primary = "#27AE60"  # Emerald Green
+        self.red = "#E74C3C"  # Danger Red
+        self.orange = "#E05D3A"  # Warning Orange
+        self.text_dark = "#2C3E50"
+        self.text_muted = "#7F8C8D"
+
+        # 🚀 SINGLE SOSYALIN FONT STANDARD
+        self.ui_font = "Poppins"
+
+        self.page_frame = ctk.CTkFrame(parent_frame, fg_color=self.color_bg)
         self.page_frame.pack(fill="both", expand=True)
 
         self.build_ui()
 
     def build_ui(self):
+        # 📌 HEADER SECTION (Slightly smaller title)
         header_frame = ctk.CTkFrame(self.page_frame, fg_color="transparent")
-        header_frame.pack(fill="x", padx=30, pady=(30, 15))
+        header_frame.pack(fill="x", padx=35, pady=(25, 10))
 
-        ctk.CTkLabel(header_frame, text="🚨 Security & Authorization Alerts", font=("Arial", 24, "bold"),
-                     text_color=self.text_dark).pack(side="left")
+        ctk.CTkLabel(header_frame, text="🚨 Security Alerts", font=(self.ui_font, 24, "bold"),
+                     text_color=self.color_sidebar).pack(side="left")
 
-        ctk.CTkButton(header_frame, text="🔄 Refresh", width=100, fg_color="#E0E0E0", text_color=self.text_dark,
-                      hover_color="#D0D0D0", command=self.refresh_logs).pack(side="right")
+        ctk.CTkButton(header_frame, text="🔄 Refresh", width=100, height=32, corner_radius=6,
+                      fg_color="#FFFFFF", border_width=1, border_color=self.color_border, text_color=self.text_dark,
+                      hover_color="#F8F9FA", font=(self.ui_font, 11, "bold"), command=self.refresh_logs).pack(
+            side="right")
 
+        # 📌 SCROLLABLE ALERTS CONTAINER
         self.logs_container = ctk.CTkScrollableFrame(self.page_frame, fg_color="transparent")
-        self.logs_container.pack(fill="both", expand=True, padx=20, pady=10)
+        self.logs_container.pack(fill="both", expand=True, padx=25, pady=5)
 
         self.refresh_logs()
 
@@ -39,13 +52,16 @@ class SecurityAlertsPage:
         try:
             logs = self.engine.get_security_logs()
         except AttributeError:
-            ctk.CTkLabel(self.logs_container, text="Pending Backend Setup: Please add get_security_logs to engine.py",
-                         text_color=self.red).pack(pady=20)
+            ctk.CTkLabel(self.logs_container, text="Backend Error: get_security_logs missing",
+                         text_color=self.red, font=(self.ui_font, 12, "bold")).pack(pady=20)
             return
 
         if not logs:
-            ctk.CTkLabel(self.logs_container, text="No security alerts at this time. Everything is safe.",
-                         text_color="gray", font=("Arial", 14, "italic")).pack(pady=50)
+            empty_frame = ctk.CTkFrame(self.logs_container, fg_color="transparent")
+            empty_frame.pack(pady=60)
+            ctk.CTkLabel(empty_frame, text="🛡️", font=(self.ui_font, 36)).pack()
+            ctk.CTkLabel(empty_frame, text="No security alerts detected.",
+                         text_color=self.text_muted, font=(self.ui_font, 13, "italic")).pack(pady=5)
             return
 
         for log in logs:
@@ -53,138 +69,141 @@ class SecurityAlertsPage:
 
     def build_alert_card(self, log):
         is_read = log.get('is_read', 0)
-        border_col = "#E0E0E0" if is_read else self.red
-        bg_col = "#F8F9FA" if is_read else "white"
+
+        strip_col = "#BDC3C7" if is_read else self.red
+        bg_col = "#FDFCF6" if is_read else "#FFFFFF"
         title_col = self.text_muted if is_read else self.red
-        desc_col = "gray" if is_read else self.text_dark
+        desc_col = "#95A5A6" if is_read else self.text_dark
 
-        card = ctk.CTkFrame(self.logs_container, fg_color=bg_col, border_color=border_col,
-                            border_width=2, corner_radius=8, cursor="hand2")
-        card.pack(fill="x", pady=8, padx=10)
+        # 🚀 COMPACT CARD: Binawasan ang pady at margins
+        card = ctk.CTkFrame(self.logs_container, fg_color=bg_col, border_color=self.color_border,
+                            border_width=1, corner_radius=8, cursor="hand2")
+        card.pack(fill="x", pady=3, padx=10)
 
-        content_frame = ctk.CTkFrame(card, fg_color="transparent", cursor="hand2")
-        content_frame.pack(fill="x", padx=20, pady=15)
+        # Subtle Color Strip
+        ctk.CTkFrame(card, width=4, fg_color=strip_col, corner_radius=0).pack(side="left", fill="y")
 
         action = log.get('action', log.get('action_type', 'System Alert'))
-        raw_details = log.get('details', 'No details provided.')
+        raw_details = log.get('details', 'No details.')
         time_str = log.get('timestamp', log.get('created_at', ''))
-
         display_details = re.sub(r'\[REQ_PWD:.*?\]', '', raw_details).strip()
 
-        lbl_title = ctk.CTkLabel(content_frame, text=action, font=("Arial", 15, "bold"), text_color=title_col)
+        # Right-aligned Time
+        time_frame = ctk.CTkFrame(card, fg_color="transparent")
+        time_frame.pack(side="right", padx=15, pady=5)
+        ctk.CTkLabel(time_frame, text=f"🕒 {time_str}", font=(self.ui_font, 10, "italic"),
+                     text_color=self.text_muted).pack()
+
+        # Content Frame (Smaller padding)
+        content_frame = ctk.CTkFrame(card, fg_color="transparent", cursor="hand2")
+        content_frame.pack(fill="both", side="left", expand=True, padx=12, pady=8)
+
+        # Alert Title (Size 12)
+        lbl_title = ctk.CTkLabel(content_frame, text=action, font=(self.ui_font, 12, "bold"), text_color=title_col)
         lbl_title.pack(anchor="w")
 
-        lbl_details = ctk.CTkLabel(content_frame, text=display_details, font=("Arial", 12),
-                                   text_color=desc_col, wraplength=800, justify="left")
-        lbl_details.pack(anchor="w", pady=(5, 0))
+        # Alert Details (Size 11)
+        lbl_details = ctk.CTkLabel(content_frame, text=display_details, font=(self.ui_font, 11),
+                                   text_color=desc_col, wraplength=700, justify="left")
+        lbl_details.pack(anchor="w")
 
-        lbl_time = ctk.CTkLabel(content_frame, text=f"📅 {time_str}", font=("Arial", 10, "italic"), text_color="gray")
-        lbl_time.pack(anchor="w", pady=(8, 0))
-
+        # Click Bindings
         click_cmd = lambda e=None, l=log, r=raw_details: self.show_alert_details(l, r)
-
         card.bind("<Button-1>", click_cmd)
         content_frame.bind("<Button-1>", click_cmd)
+        time_frame.bind("<Button-1>", click_cmd)
 
         for child in content_frame.winfo_children():
             child.bind("<Button-1>", click_cmd)
             child.configure(cursor="hand2")
+        for child in time_frame.winfo_children():
+            child.bind("<Button-1>", click_cmd)
+            child.configure(cursor="hand2")
 
+    # =========================================================================
+    # THE ALERT DETAILS MODAL (Standard Poppins Design)
+    # =========================================================================
     def show_alert_details(self, log, raw_details):
         root_window = self.page_frame.winfo_toplevel()
-
         popup = ctk.CTkToplevel(root_window)
-        popup.title("Security Alert Details")
+        popup.title("Security Report")
 
-        # 🚀 POGI UPDATE: THE CENTERING MATH!
         window_width = 550
-        window_height = 450
+        window_height = 480
 
-        # Kunin ang screen size
-        screen_width = popup.winfo_screenwidth()
-        screen_height = popup.winfo_screenheight()
-
-        # Compute ang X at Y coordinates para pumagitna
-        x_cordinate = int((screen_width / 2) - (window_width / 2))
-        y_cordinate = int((screen_height / 2) - (window_height / 2))
-
-        popup.geometry(f"{window_width}x{window_height}+{x_cordinate}+{y_cordinate}")
+        # Perfect Centering
+        popup.update_idletasks()
+        x = int((popup.winfo_screenwidth() / 2) - (window_width / 2))
+        y = int((popup.winfo_screenheight() / 2) - (window_height / 2))
+        popup.geometry(f"{window_width}x{window_height}+{x}+{y}")
 
         popup.transient(root_window)
         popup.grab_set()
-        popup.configure(fg_color="#F8F9FA")
+        popup.configure(fg_color="#FDFCF6")
 
-        ctk.CTkLabel(popup, text="🚨 Complete Alert Report", font=("Arial", 20, "bold"), text_color=self.red).pack(
-            pady=(20, 10))
+        # Header
+        header_bg = ctk.CTkFrame(popup, fg_color=self.color_sidebar, corner_radius=0, height=65)
+        header_bg.pack(fill="x")
+        header_bg.pack_propagate(False)
+        ctk.CTkLabel(header_bg, text="🚨 Security Incident Details", font=(self.ui_font, 18, "bold"),
+                     text_color="white").pack(pady=18)
 
-        info_frame = ctk.CTkFrame(popup, fg_color="white", border_color="#E0E0E0", border_width=1, corner_radius=10)
-        info_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        # Info Grid
+        info_frame = ctk.CTkFrame(popup, fg_color="#FFFFFF", border_color=self.color_border, border_width=1,
+                                  corner_radius=10)
+        info_frame.pack(fill="both", expand=True, padx=20, pady=15)
 
-        ctk.CTkLabel(info_frame, text=f"Log ID:", font=("Arial", 12, "bold")).grid(row=0, column=0, sticky="w", padx=15,
-                                                                                   pady=(15, 5))
-        ctk.CTkLabel(info_frame, text=f"#{log.get('log_id', 'N/A')}", font=("Arial", 12)).grid(row=0, column=1,
-                                                                                               sticky="w", padx=10,
-                                                                                               pady=(15, 5))
+        def create_grid_row(parent, row_idx, label, value, val_color=self.text_dark):
+            ctk.CTkLabel(parent, text=label, font=(self.ui_font, 11, "bold"), text_color=self.text_muted).grid(
+                row=row_idx, column=0, sticky="w", padx=15, pady=8)
+            ctk.CTkLabel(parent, text=value, font=(self.ui_font, 11, "bold"), text_color=val_color).grid(
+                row=row_idx, column=1, sticky="w", padx=10, pady=8)
 
-        ctk.CTkLabel(info_frame, text=f"Timestamp:", font=("Arial", 12, "bold")).grid(row=1, column=0, sticky="w",
-                                                                                      padx=15, pady=5)
-        ctk.CTkLabel(info_frame, text=f"{log.get('timestamp', log.get('created_at', 'N/A'))}", font=("Arial", 12)).grid(
-            row=1, column=1, sticky="w", padx=10, pady=5)
+        create_grid_row(info_frame, 0, "Log Reference:", f"#{log.get('log_id', 'N/A')}")
+        create_grid_row(info_frame, 1, "Occurrence:", f"{log.get('timestamp', log.get('created_at', 'N/A'))}")
 
-        # 🚀 POGI UPDATE: Mas Matibay na Employee Name Logic
-        # Susubukan nating hanapin ang pangalan sa raw_details kung nagfa-fail 'yung dictionary fetch!
+        # Employee Logic
         emp_name = log.get('employee_name', '').strip()
         user_id = log.get('user_id', 'N/A')
-
-        # Fallback Name Search sa Narrative (e.g. "password for Kristan Ariate (Staff)")
         if not emp_name or emp_name == "System / Not Found":
             name_match = re.search(r'password for (.*?)\(', raw_details)
-            if name_match:
-                emp_name = name_match.group(1).strip()
-            else:
-                emp_name = "Target User"
+            emp_name = name_match.group(1).strip() if name_match else "Unknown User"
 
-        display_user = f"{emp_name} (ID: {user_id})"
-
-        ctk.CTkLabel(info_frame, text="Employee:", font=("Arial", 12, "bold")).grid(row=2, column=0, sticky="w",
-                                                                                    padx=15, pady=5)
-        ctk.CTkLabel(info_frame, text=display_user, font=("Arial", 12, "bold"), text_color=self.text_dark).grid(row=2,
-                                                                                                                column=1,
-                                                                                                                sticky="w",
-                                                                                                                padx=10,
-                                                                                                                pady=5)
+        create_grid_row(info_frame, 2, "Account Name:", f"{emp_name} (ID: {user_id})")
 
         action = log.get('action', log.get('action_type', 'N/A'))
+        create_grid_row(info_frame, 3, "Activity Type:", action, val_color=self.orange)
 
-        ctk.CTkLabel(info_frame, text=f"Action Type:", font=("Arial", 12, "bold")).grid(row=3, column=0, sticky="w",
-                                                                                        padx=15, pady=5)
-        ctk.CTkLabel(info_frame, text=action, font=("Arial", 12, "bold"), text_color="#E79124").grid(row=3, column=1,
-                                                                                                     sticky="w",
-                                                                                                     padx=10, pady=5)
-
-        ctk.CTkLabel(info_frame, text="Full Narrative:", font=("Arial", 12, "bold")).grid(row=4, column=0, sticky="nw",
-                                                                                          padx=15, pady=(15, 5))
+        # Narrative Box
+        ctk.CTkLabel(info_frame, text="Full Narrative:", font=(self.ui_font, 11, "bold"),
+                     text_color=self.text_muted).grid(row=4, column=0, sticky="nw", padx=15, pady=8)
 
         display_details = re.sub(r'\[REQ_PWD:.*?\]', '', raw_details).strip()
-
-        narrative_box = ctk.CTkTextbox(info_frame, height=100, fg_color="#F4F7F6", text_color="black")
-        narrative_box.grid(row=4, column=1, sticky="nsew", padx=10, pady=(15, 10))
+        narrative_box = ctk.CTkTextbox(info_frame, height=80, fg_color="#F8F9FA", border_width=1,
+                                       border_color=self.color_border, text_color="black", font=(self.ui_font, 11))
+        narrative_box.grid(row=4, column=1, sticky="nsew", padx=10, pady=10)
         narrative_box.insert("1.0", display_details)
         narrative_box.configure(state="disabled")
 
         info_frame.grid_columnconfigure(1, weight=1)
 
-        if action == "PASSWORD RESET REQUEST" and log.get('is_read') == 0:
-            btn_frame = ctk.CTkFrame(popup, fg_color="transparent")
-            btn_frame.pack(pady=(10, 20))
+        # Actions
+        btn_frame = ctk.CTkFrame(popup, fg_color="transparent")
+        btn_frame.pack(pady=(0, 20))
 
-            ctk.CTkButton(btn_frame, text="✅ Approve Reset", fg_color=self.primary, hover_color="#1E8449",
-                          command=lambda: self.approve_password(log, raw_details, popup)).pack(side="left", padx=10)
-            ctk.CTkButton(btn_frame, text="❌ Deny", fg_color=self.red, hover_color="#C0392B",
-                          command=lambda: self.deny_password(log, popup)).pack(side="left", padx=10)
+        if action == "PASSWORD RESET REQUEST" and log.get('is_read') == 0:
+            ctk.CTkButton(btn_frame, text="✅ Approve", fg_color=self.primary, hover_color="#1E8449",
+                          font=(self.ui_font, 12, "bold"), width=130, height=38, corner_radius=8,
+                          command=lambda: self.approve_password(log, raw_details, popup)).pack(side="left", padx=8)
+
+            ctk.CTkButton(btn_frame, text="❌ Deny", fg_color="transparent", border_width=1, border_color=self.red,
+                          text_color=self.red, hover_color="#FDEDEC", font=(self.ui_font, 12, "bold"), width=100,
+                          height=38, corner_radius=8,
+                          command=lambda: self.deny_password(log, popup)).pack(side="left", padx=8)
         else:
-            ctk.CTkButton(popup, text="Acknowledge & Close", fg_color=self.primary, hover_color="#1E8449",
-                          command=popup.destroy).pack(pady=(10, 20))
+            ctk.CTkButton(btn_frame, text="Close Report", fg_color=self.color_sidebar, hover_color="#2A2F6C",
+                          font=(self.ui_font, 12, "bold"), width=180, height=38, corner_radius=8,
+                          command=popup.destroy).pack()
 
             if log.get('is_read') == 0:
                 try:
@@ -195,33 +214,22 @@ class SecurityAlertsPage:
 
     def approve_password(self, log, raw_details, window):
         user_id = log.get('user_id')
-        log_id = log.get('log_id')
+        if not user_id: return messagebox.showerror("Error", "User ID missing.", parent=window)
 
-        match = re.search(r'\[REQ_PWD:(.*?)\]', raw_details)
-        if match and user_id:
-            new_pwd = match.group(1)
-
-            if self.engine.reset_user_password(user_id, new_pwd):
-                self.engine.log_security_event(user_id, "PASSWORD RESET APPROVED",
-                                               f"Kapitan has successfully approved and applied the password change for ID: {user_id}.")
-                self.engine.mark_alert_as_read(log_id)
-
-                messagebox.showinfo("Approved", "Password change successfully approved and applied!")
-                window.destroy()
-                self.refresh_logs()
-            else:
-                messagebox.showerror("Error", "Failed to update password in database.")
+        if self.engine.approve_pending_password(user_id):
+            self.engine.log_security_event(user_id, "PASSWORD RESET APPROVED", "Kapitan approved the reset.")
+            self.engine.mark_alert_as_read(log.get('log_id'))
+            messagebox.showinfo("Success", "Account successfully reset!", parent=window)
+            window.destroy()
+            self.refresh_logs()
         else:
-            messagebox.showerror("Error", "Could not extract the new password. The request might be corrupted.")
+            messagebox.showerror("Error", "Request failed or expired.", parent=window)
 
     def deny_password(self, log, window):
-        log_id = log.get('log_id')
         user_id = log.get('user_id')
-
-        self.engine.log_security_event(user_id, "PASSWORD RESET DENIED",
-                                       f"Kapitan has denied the password change request for ID: {user_id}.")
-        self.engine.mark_alert_as_read(log_id)
-
-        messagebox.showinfo("Denied", "The password reset request has been denied.")
+        self.engine.clear_pending_reset(user_id)
+        self.engine.log_security_event(user_id, "PASSWORD RESET DENIED", "Kapitan denied the request.")
+        self.engine.mark_alert_as_read(log.get('log_id'))
+        messagebox.showinfo("Denied", "Request has been denied.", parent=window)
         window.destroy()
         self.refresh_logs()
