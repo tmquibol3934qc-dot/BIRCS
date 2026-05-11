@@ -72,54 +72,70 @@ class DatabaseEngine:
         except Exception as e:
             return False, f"System Error: {e}"
 
-    # --- LOGIN (With RFID Support!) ---
+
+
+        # --- LOGIN (With RFID Support!) ---
     def authenticate_user(self, login_val, password=""):
-        """Verifies credentials (Username OR Employee ID) OR RFID, and enforces suspensions"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
+            """Verifies credentials (Username OR Employee ID) OR RFID, and enforces suspensions"""
+            try:
+                conn = self.get_connection()
+                cursor = conn.cursor(dictionary=True)
 
-            if not password:
-                query = "SELECT * FROM users WHERE rfid_code = %s"
-                cursor.execute(query, (login_val,))
-            else:
-                query = "SELECT * FROM users WHERE (username = %s OR employee_id = %s) AND password = %s"
-                cursor.execute(query, (login_val, login_val, password))
+                if not password:
+                    query = "SELECT * FROM users WHERE rfid_code = %s"
+                    cursor.execute(query, (login_val,))
+                else:
+                    # 🚀 BARDAGULAN UPDATE: Tinuruan na natin ang system na basahin pati ang Temp Password!
+                    query = """
+                        SELECT * FROM users 
+                        WHERE (username = %s OR employee_id = %s) 
+                        AND (password = %s OR temp_password = %s)
+                    """
+                    # Doble yung password parameter kasi i-che-check niya in BOTH columns
+                    cursor.execute(query, (login_val, login_val, password, password))
 
-            user = cursor.fetchone()
+                user = cursor.fetchone()
 
-            if not user:
+                if not user:
+                    conn.close()
+                    return {"success": False, "message": "Invalid Credentials or Unregistered RFID."}
+
+                # 🚀 BARDAGULAN UPDATE: ONE-TIME PASSWORD BURNER LOGIC
+                # Kung ang tinype nilang password ay nag-match sa temp_password column,
+                # buburahin na natin agad sa database para hindi na magamit ulit!
+                if password and user.get('temp_password') == password:
+                    cursor.execute("UPDATE users SET temp_password = NULL WHERE id = %s", (user['id'],))
+                    conn.commit()
+                # ---------------------------------------------------------
+
+                status = user.get('status', 'Active')
+
+                if status == 'Blocked':
+                    conn.close()
+                    return {"success": False,
+                            "message": "ACCESS DENIED: This account has been permanently blocked by the Kapitan."}
+
+                if status == 'Suspended':
+                    suspend_until = user.get('suspension_until')
+
+                    if suspend_until:
+                        if datetime.now() < suspend_until:
+                            formatted_time = suspend_until.strftime("%B %d, %Y at %I:%M %p")
+                            conn.close()
+                            return {"success": False,
+                                    "message": f"ACCOUNT SUSPENDED.\n\nYou cannot log in until:\n{formatted_time}"}
+                        else:
+                            cursor.execute("UPDATE users SET status = 'Active', suspension_until = NULL WHERE id = %s",
+                                           (user['id'],))
+                            conn.commit()
+                            user['status'] = 'Active'
+
                 conn.close()
-                return {"success": False, "message": "Invalid Credentials or Unregistered RFID."}
+                return {"success": True, "user_data": user}
 
-            status = user.get('status', 'Active')
-
-            if status == 'Blocked':
-                conn.close()
-                return {"success": False,
-                        "message": "ACCESS DENIED: This account has been permanently blocked by the Kapitan."}
-
-            if status == 'Suspended':
-                suspend_until = user.get('suspension_until')
-
-                if suspend_until:
-                    if datetime.now() < suspend_until:
-                        formatted_time = suspend_until.strftime("%B %d, %Y at %I:%M %p")
-                        conn.close()
-                        return {"success": False,
-                                "message": f"ACCOUNT SUSPENDED.\n\nYou cannot log in until:\n{formatted_time}"}
-                    else:
-                        cursor.execute("UPDATE users SET status = 'Active', suspension_until = NULL WHERE id = %s",
-                                       (user['id'],))
-                        conn.commit()
-                        user['status'] = 'Active'
-
-            conn.close()
-            return {"success": True, "user_data": user}
-
-        except Exception as e:
-            print(f"Auth Error: {e}")
-            return {"success": False, "message": "Database connection error."}
+            except Exception as e:
+                print(f"Auth Error: {e}")
+                return {"success": False, "message": "Database connection error."}
 
     # --- CHECK USER (For Forgot Password) ---
     def check_user_exists(self, emp_id):
@@ -500,8 +516,8 @@ class DatabaseEngine:
             return {"handled": 0, "resolved": 0}
 
     def update_user_account(self, user_id, first_name, last_name, employee_id, password, role, status, rfid_code,
-                            suspend_val=0, suspend_type="Hours"):
-        """Updates user details (including RFID) and calculates future suspension dates"""
+                            suspend_val=0, suspend_type="Hours", profile_pic=None):
+        """Updates user details and automatically CLEARS any pending password resets"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -514,14 +530,18 @@ class DatabaseEngine:
                 else:
                     suspend_until = datetime.now() + timedelta(days=int(suspend_val))
 
+            # 🚀 BARDAGULAN UPDATE: Isinama na natin ang pag-clear sa temp_password at is_pending_reset
             query = """
                 UPDATE users 
-                SET first_name=%s, last_name=%s, employee_id=%s, password=%s, role=%s, status=%s, suspension_until=%s, rfid_code=%s
+                SET first_name=%s, last_name=%s, employee_id=%s, password=%s, role=%s, status=%s, 
+                    suspension_until=%s, rfid_code=%s, profile_pic=%s,
+                    temp_password=NULL, is_pending_reset=0
                 WHERE id=%s
             """
 
+            # Siguraduhing tugma ang bilang ng variables sa %s
             cursor.execute(query, (first_name, last_name, employee_id, password, role, status, suspend_until, rfid_code,
-                                   user_id))
+                                   profile_pic, user_id))
             conn.commit()
             conn.close()
             return True
@@ -620,9 +640,12 @@ class DatabaseEngine:
             conn = self.get_connection()
             cursor = conn.cursor(dictionary=True)
 
+            # 🚀 BARDAGULAN FILTER: 'created_at >= NOW() - INTERVAL 1 MONTH'
+            # Ibig sabihin, yung mga record lang na pasok sa huling 30 days ang ilalabas ng query.
             query = """
                 SELECT * FROM incidents 
                 WHERE (case_no LIKE %s OR complainant_name LIKE %s OR respondent_name LIKE %s)
+                AND created_at >= NOW() - INTERVAL 1 MONTH
             """
             params = [f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"]
 
@@ -638,7 +661,7 @@ class DatabaseEngine:
 
             return result
         except Exception as e:
-            print(f"Search Error sa Engine: {e}")
+            print(f"Search Error: {e}")
             return []
 
     def reopen_case_direct(self, case_no, second_narrative):
@@ -659,11 +682,22 @@ class DatabaseEngine:
     # APPEALS & KAPITAN APPROVAL SYSTEM
     # ==========================================
     def request_case_reopen(self, case_no, new_narrative):
-        """Staff requests a re-open. Flags it for the Kapitan."""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor()
-            query = "UPDATE incidents SET reopen_status = 'Requested', narrative_2 = %s WHERE case_no = %s"
+            cursor = conn.cursor(dictionary=True)
+
+            # 🛑 BOUNCER CHECK: I-check kung lagpas na sa 1 month ang kaso
+            cursor.execute("SELECT created_at FROM incidents WHERE case_no = %s", (case_no,))
+            case = cursor.fetchone()
+
+            if case:
+                # Kung lumampas na sa 30 days ang created_at, bawal na i-reopen!
+                if case['created_at'] < datetime.now() - timedelta(days=30):
+                    conn.close()
+                    return False  # Reject the request
+
+            # Kung pasok pa sa 30 days, tuloy ang request
+            query = "UPDATE incidents SET reopen_status = 'Requested', narrative_2 = %s, reopen_requested_at = NOW() WHERE case_no = %s"
             cursor.execute(query, (new_narrative, case_no))
             conn.commit()
             conn.close()
@@ -1011,3 +1045,134 @@ class DatabaseEngine:
         except Exception as e:
             print(f"Database Error (Logs): {e}")
             return []
+
+        # 1. Update the Request Function
+    def create_password_reset_request(self, emp_id, temp_password, requested_new_password):
+            """Saves the temp pass AND securely parks the requested new password"""
+            try:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                # 🚀 POGI UPDATE: Sinesave na natin yung requested_password
+                query = """
+                    UPDATE users 
+                    SET temp_password = %s, requested_password = %s, is_pending_reset = 1 
+                    WHERE employee_id = %s OR username = %s
+                """
+                cursor.execute(query, (temp_password, requested_new_password, emp_id, emp_id))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                print(f"Engine Error (Temp Pass): {e}")
+                return False
+
+        # 2. Add this NEW function for Kapitan's Approval
+    def approve_pending_password(self, emp_id):
+            """Moves the parked password to the main password and clears flags"""
+            try:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                # 🚀 POGI UPDATE: Ang ganda ng logic nito, ita-transfer niya lang!
+                query = """
+                    UPDATE users 
+                    SET password = requested_password, 
+                        requested_password = NULL, 
+                        temp_password = NULL, 
+                        is_pending_reset = 0 
+                    WHERE (employee_id = %s OR username = %s) AND requested_password IS NOT NULL
+                """
+                cursor.execute(query, (emp_id, emp_id))
+                affected_rows = cursor.rowcount
+                conn.commit()
+                conn.close()
+                return affected_rows > 0
+            except Exception as e:
+                print(f"Error approving password: {e}")
+                return False
+
+    def check_if_pending_reset(self, emp_id):
+        """Checks if the user already has a pending password reset request"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            # Titingnan natin yung is_pending_reset column na ginawa natin kanina
+            cursor.execute("SELECT is_pending_reset FROM users WHERE employee_id = %s OR username = %s",
+                           (emp_id, emp_id))
+            result = cursor.fetchone()
+            conn.close()
+
+            if result and result['is_pending_reset'] == 1:
+                return True
+            return False
+        except Exception as e:
+            print(f"Error checking pending status: {e}")
+            return False
+
+# ==========================================
+    # TIME-BASED RE-OPEN LOGIC (THE AUTO-JANITOR)
+    # ==========================================
+    def auto_manage_reopen_cases(self):
+        """Automatically drops expired requests and abandons neglected approved cases"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # 🛑 RULE 1: Kung 3 days na hindi pa rin ina-approve ni Kapitan, DROP THE REQUEST.
+            # I-babalik sa normal at buburahin yung narrative_2 na tinype nila para malinis.
+            query_drop_pending = """
+                UPDATE incidents 
+                SET reopen_status = 'Dropped', narrative_2 = NULL 
+                WHERE reopen_status = 'Requested' 
+                AND reopen_requested_at < NOW() - INTERVAL 3 DAY
+            """
+            cursor.execute(query_drop_pending)
+
+            # 🛑 RULE 2: Kung na-approve na ni Kapitan, pero 3 days na nakalipas wala pa ring settlement
+            # (nakalimutan ng staff o di sumipot yung tao), ABANDON THE CASE. Back to Resolved.
+            query_abandon_approved = """
+                UPDATE incidents 
+                SET reopen_status = 'Abandoned', status = 'Resolved' 
+                WHERE reopen_status = 'Approved' 
+                AND status IN ('Pending', 'In Progress') 
+                AND reopen_approved_at < NOW() - INTERVAL 3 DAY 
+                AND (settlement_details_2 IS NULL OR settlement_details_2 = '')
+            """
+            cursor.execute(query_abandon_approved)
+
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Auto-Janitor Error: {e}")
+
+    # 🚀 BARDAGULAN UPDATE: Kailangan nating i-record kung kailan pinindot yung request!
+    def request_case_reopen(self, case_no, new_narrative):
+        """Staff requests a re-open. Flags it for the Kapitan with a Timestamp."""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            # Nilagyan natin ng NOW() yung reopen_requested_at
+            query = "UPDATE incidents SET reopen_status = 'Requested', narrative_2 = %s, reopen_requested_at = NOW() WHERE case_no = %s"
+            cursor.execute(query, (new_narrative, case_no))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            return False
+
+    # 🚀 BARDAGULAN UPDATE: Kailangan nating i-record kung kailan in-approve ni Kapitan!
+    def handle_reopen_request(self, case_no, action):
+        """Kapitan approves or denies the request"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            if action == 'Approve':
+                # Nilagyan natin ng NOW() yung reopen_approved_at
+                query = "UPDATE incidents SET status = 'Pending', reopen_status = 'Approved', reopen_approved_at = NOW() WHERE case_no = %s"
+            else:
+                query = "UPDATE incidents SET reopen_status = 'Denied' WHERE case_no = %s"
+            cursor.execute(query, (case_no,))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            return False
