@@ -56,13 +56,10 @@ class DashboardWindow:
         self.main_frame = ctk.CTkFrame(self.window, fg_color=self.color_bg, corner_radius=0)
         self.main_frame.grid(row=0, column=1, sticky="nsew")
 
-        # 🚀 THE FIX: GLOBAL TOP BAR (Para hindi mag-overlap at laging kita!)
-        self.top_bar = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.top_bar.pack(fill="x")
-
-        # 🚀 THE FIX: CONTENT FRAME (Dito na papasok yung mga pages natin)
-        self.content_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.content_frame.pack(fill="both", expand=True)
+        # 🚀 THE POGI FIX: Tinanggal na ang top_bar!
+        # Gumawa tayo ng page_container para hindi na lulubog ang mga modules!
+        self.page_container = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.page_container.pack(fill="both", expand=True)
 
         self.create_profile_panel()
         self.update_timer()
@@ -121,17 +118,22 @@ class DashboardWindow:
     def set_active_tab(self, active_key):
         for key, btn in self.nav_buttons.items():
             if key == active_key:
-                btn.configure(fg_color=self.primary, text_color="white", hover_color="#1E8449")
+                btn.configure(fg_color="white", text_color=self.color_sidebar, hover_color="#F8F9FA")
             else:
                 btn.configure(fg_color="transparent", text_color="white", hover_color="#2A2F6C")
 
-        # 🚀 Isasara lang natin ang dropdown panel kung nag-switch sila ng tab
-        if self.panel_visible:
+        if hasattr(self, 'panel_visible') and self.panel_visible:
             self.toggle_profile_panel()
 
+        # 🚀 MAGIC TRICK: Ipapakita lang natin yung floating profile kapag "dashboard"
+        if hasattr(self, 'profile_btn'):
+            if active_key == "dashboard":
+                self.profile_btn.place(relx=0.97, rely=0.03, anchor="ne")
+            else:
+                self.profile_btn.place_forget()
+
     def hide_all_pages(self):
-        # 🚀 I-clear lang ang content_frame, hindi madadamay ang Top Bar natin!
-        for widget in self.content_frame.winfo_children():
+        for widget in self.page_container.winfo_children():
             widget.pack_forget()
 
     # --- PROFILE PANEL WIDGET ---
@@ -151,15 +153,13 @@ class DashboardWindow:
         btn_text = "" if has_image else "👤"
         btn_image = self.btn_img if has_image else None
 
-        # 🚀 THE FIX: Naka-pack na siya nang maayos sa Top Bar! Hindi na floating!
+        # 🚀 THE FIX: Binalik natin siya sa Floating Mode, hindi na siya makikipagsiksikan sa top!
         self.profile_btn = ctk.CTkButton(
-            self.top_bar, text=btn_text, image=btn_image, width=48, height=48, corner_radius=24,
+            self.main_frame, text=btn_text, image=btn_image, width=48, height=48, corner_radius=24,
             fg_color=self.color_card, text_color=self.color_sidebar, border_width=1, border_color=self.color_border,
             hover_color="#F8F9FA", font=(self.ui_font, 20), command=self.toggle_profile_panel
         )
-        self.profile_btn.pack(side="right", padx=35, pady=(15, 0))
 
-        # The Dropdown Widget (Ito lang ang floating over everything)
         self.account_panel = ctk.CTkFrame(self.window, width=280, corner_radius=12, fg_color=self.color_card,
                                           border_width=1, border_color=self.color_border)
         self.panel_visible = False
@@ -215,8 +215,7 @@ class DashboardWindow:
             self.account_panel.place_forget()
             self.panel_visible = False
         else:
-            # Dropdown appears cleanly below the Top Bar
-            self.account_panel.place(relx=0.98, rely=0.09, anchor="ne")
+            self.account_panel.place(relx=0.97, rely=0.10, anchor="ne")
             self.account_panel.lift()
             self.panel_visible = True
 
@@ -232,15 +231,13 @@ class DashboardWindow:
         self.hide_all_pages()
         self.set_active_tab("dashboard")
         if "dashboard" in self.page_cache: self.page_cache["dashboard"].destroy()
-        # 🚀 IMPORTANT: Passed self.content_frame instead of main_frame
-        self.page_cache["dashboard"] = OverviewPage(self.content_frame, self.engine, self.user).container
+        self.page_cache["dashboard"] = OverviewPage(self.page_container, self.engine, self.user).container
 
     def show_blotter_page(self):
         self.hide_all_pages()
         self.set_active_tab("blotter")
         if "blotter" not in self.page_cache:
-            # 🚀 IMPORTANT: Passed self.content_frame instead of main_frame
-            container = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+            container = ctk.CTkFrame(self.page_container, fg_color="transparent")
             IncidentBlotterPage(container, self.engine, self.user)
             self.page_cache["blotter"] = container
         self.page_cache["blotter"].pack(fill="both", expand=True)
@@ -249,8 +246,7 @@ class DashboardWindow:
         self.hide_all_pages()
         self.set_active_tab("resolution")
         if "resolution" not in self.page_cache:
-            # 🚀 IMPORTANT: Passed self.content_frame instead of main_frame
-            container = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+            container = ctk.CTkFrame(self.page_container, fg_color="transparent")
             ResolutionPage(container, self.engine, self.user)
             self.page_cache["resolution"] = container
         self.page_cache["resolution"].pack(fill="both", expand=True)
@@ -259,8 +255,7 @@ class DashboardWindow:
         self.hide_all_pages()
         self.set_active_tab("archives")
         if "archives" not in self.page_cache:
-            # 🚀 IMPORTANT: Passed self.content_frame instead of main_frame
-            container = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+            container = ctk.CTkFrame(self.page_container, fg_color="transparent")
             ArchivesPage(container, self.engine, self.user)
             self.page_cache["archives"] = container
         self.page_cache["archives"].pack(fill="both", expand=True)
