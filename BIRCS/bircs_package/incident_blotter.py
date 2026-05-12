@@ -8,7 +8,7 @@ class IncidentBlotterPage:
         self.engine = engine
         self.user = user_data
 
-        # 🎨 THE PREMIUM WEB PALETTE & TYPOGRAPHY
+        # 🎨 THE PREMIUM WEB PALETTE
         self.color_sidebar = "#1D2153"  # Deep Navy
         self.color_bg = "#F4F6F7"  # Web Canvas Gray
         self.color_card = "#FFFFFF"  # Crisp White
@@ -20,11 +20,11 @@ class IncidentBlotterPage:
         self.text_dark = "#2C3E50"
         self.text_muted = "#7F8C8D"
 
-        # 🚀 SOSYALIN FONT STANDARD
+        # 🚀 SINGLE SOSYALIN FONT STANDARD
         self.ui_font = "Poppins"
-        self.header_font = "Poppins"
 
-        self.page_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        # 🚀 THE FIX: Ginawa nating ScrollableFrame para hindi lumubog ang button!
+        self.page_frame = ctk.CTkScrollableFrame(parent_frame, fg_color="transparent")
         self.page_frame.pack(fill="both", expand=True)
 
         self.build_ui()
@@ -49,7 +49,7 @@ class IncidentBlotterPage:
         header_frame = ctk.CTkFrame(self.page_frame, fg_color="transparent")
         header_frame.pack(fill="x", padx=35, pady=(30, 15))
 
-        ctk.CTkLabel(header_frame, text="📝 New Incident Blotter", font=(self.header_font, 26, "bold"),
+        ctk.CTkLabel(header_frame, text="📝 New Incident Blotter", font=(self.ui_font, 26, "bold"),
                      text_color=self.color_sidebar).pack(side="left")
 
         # Auto-Generated Badge
@@ -122,10 +122,10 @@ class IncidentBlotterPage:
         self.date_entry.insert(0, now.strftime("%m/%d/%Y"))
 
         ctk.CTkButton(date_input_frame, text="📅", width=38, height=38, fg_color="#F8F9FA", hover_color="#EAECEE",
-                      border_width=1, border_color=self.color_border, text_color="black", font=("Arial", 14),
+                      border_width=1, border_color=self.color_border, text_color="black", font=(self.ui_font, 14),
                       command=self.open_calendar_popup).pack(side="left", padx=(5, 0))
 
-        # Category
+        # 🚀 THE MAGIC COMBOBOX: Dynamic Auto-Filter Category!
         cat_group = ctk.CTkFrame(mid_inner, fg_color="transparent")
         cat_group.pack(side="left", fill="x", expand=True, padx=5)
         ctk.CTkLabel(cat_group, text="Category", font=(self.ui_font, 11, "bold"), text_color=self.text_muted).pack(
@@ -133,14 +133,19 @@ class IncidentBlotterPage:
 
         self.default_categories = ["Theft", "Physical Assault", "Noise Complaint", "Property Damage", "Trespassing"]
         db_categories = self.engine.get_incident_categories()
-        combined_cats = list(dict.fromkeys(self.default_categories + db_categories))
 
-        self.category_var = ctk.StringVar(value=combined_cats[0] if combined_cats else "")
-        self.cat_combo = ctk.CTkComboBox(cat_group, variable=self.category_var, values=combined_cats, height=38,
+        # Save the master list of categories
+        self.combined_cats = list(dict.fromkeys(self.default_categories + db_categories))
+
+        self.category_var = ctk.StringVar(value=self.combined_cats[0] if self.combined_cats else "")
+        self.cat_combo = ctk.CTkComboBox(cat_group, variable=self.category_var, values=self.combined_cats, height=38,
                                          fg_color="#F8F9FA", border_color=self.color_border, text_color=self.text_dark,
                                          button_color=self.color_border, dropdown_hover_color="#D5D8DC",
                                          font=(self.ui_font, 12))
         self.cat_combo.pack(fill="x", pady=(5, 0))
+
+        # 🚀 REAL-TIME TYPING LISTENER
+        self.category_var.trace_add("write", self.filter_category_list)
 
         # Zone (Deep Navy Styling)
         zone_group = ctk.CTkFrame(mid_inner, fg_color="transparent")
@@ -160,7 +165,7 @@ class IncidentBlotterPage:
         status_group.pack(side="left", fill="x", expand=True, padx=5)
         ctk.CTkLabel(status_group, text="Priority", font=(self.ui_font, 11, "bold"), text_color=self.text_muted).pack(
             anchor="w")
-        self.status_var = ctk.StringVar(value="In Progress")
+        self.status_var = ctk.StringVar(value="Normal") # Default natin sa Normal
         ctk.CTkOptionMenu(status_group, variable=self.status_var, values=["Normal", "High Priority"], height=38,
                           fg_color=self.orange, button_color=self.orange, button_hover_color="#C64D2B",
                           text_color="white", font=(self.ui_font, 12, "bold")).pack(fill="x", pady=(5, 0))
@@ -168,19 +173,21 @@ class IncidentBlotterPage:
         # 📌 4. BOTTOM SECTION: NARRATIVE
         bot_card = ctk.CTkFrame(self.page_frame, fg_color=self.color_card, corner_radius=12, border_width=1,
                                 border_color=self.color_border)
-        bot_card.pack(fill="both", expand=True, padx=35, pady=(0, 20))
+        # 🚀 THE FIX: Tinanggal ang expand=True dito para di siya umagaw ng space!
+        bot_card.pack(fill="x", padx=35, pady=(0, 20))
 
         ctk.CTkLabel(bot_card, text="Sworn Statement (Narrative)", font=(self.ui_font, 13, "bold"),
                      text_color=self.color_sidebar).pack(anchor="w", padx=25, pady=(20, 5))
 
-        self.narrative_box = ctk.CTkTextbox(bot_card, fg_color="#F8F9FA", border_color=self.color_border,
-                                            border_width=1,
-                                            text_color=self.text_dark, font=(self.ui_font, 12))
-        self.narrative_box.pack(fill="both", expand=True, padx=25, pady=(0, 25))
+        # 🚀 THE FIX: Binigyan ng fixed height na 150 at tinanggal ang expand=True!
+        self.narrative_box = ctk.CTkTextbox(bot_card, height=150, fg_color="#F8F9FA", border_color=self.color_border,
+                                            border_width=1, text_color=self.text_dark, font=(self.ui_font, 12))
+        self.narrative_box.pack(fill="x", padx=25, pady=(0, 25))
 
         # 📌 5. SAVE BUTTON
         btn_frame = ctk.CTkFrame(self.page_frame, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=35, pady=(0, 30))
+        # 🚀 Padding sa baba para hindi dumikit pag ini-scroll!
+        btn_frame.pack(fill="x", padx=35, pady=(0, 40))
 
         ctk.CTkButton(btn_frame, text="💾 Save Official Record", fg_color=self.primary, hover_color="#1E8449",
                       corner_radius=8,
@@ -190,6 +197,18 @@ class IncidentBlotterPage:
     # ==================================================
     # HELPER FUNCTIONS & LOGIC
     # ==================================================
+
+    def filter_category_list(self, *args):
+        typed_text = self.category_var.get().strip()
+        if not typed_text:
+            self.cat_combo.configure(values=self.combined_cats)
+            return
+
+        filtered_list = [c for c in self.combined_cats if typed_text.lower() in c.lower()]
+        if filtered_list:
+            self.cat_combo.configure(values=filtered_list)
+        else:
+            self.cat_combo.configure(values=self.combined_cats)
 
     def toggle_resp_info(self):
         if self.unknown_resp_var.get():
@@ -300,7 +319,6 @@ class IncidentBlotterPage:
             messagebox.showinfo("Success", f"Incident successfully filed!\n\nOfficial Case ID: {case_id_or_msg}",
                                 parent=top_level)
 
-            # Reset Form
             self.comp_name.delete(0, 'end')
             self.comp_contact.delete(0, 'end')
             self.comp_address.delete(0, 'end')
@@ -322,7 +340,7 @@ class IncidentBlotterPage:
             self.date_entry.insert(0, now.strftime("%m/%d/%Y"))
 
             db_cats = self.engine.get_incident_categories()
-            new_list = list(dict.fromkeys(self.default_categories + db_cats))
-            self.cat_combo.configure(values=new_list)
+            self.combined_cats = list(dict.fromkeys(self.default_categories + db_cats))
+            self.cat_combo.configure(values=self.combined_cats)
         else:
             messagebox.showerror("Error", case_id_or_msg, parent=top_level)
