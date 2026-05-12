@@ -27,7 +27,7 @@ class SecurityAlertsPage:
         self.build_ui()
 
     def build_ui(self):
-        # 📌 HEADER SECTION (Slightly smaller title)
+        # 📌 HEADER SECTION
         header_frame = ctk.CTkFrame(self.page_frame, fg_color="transparent")
         header_frame.pack(fill="x", padx=35, pady=(25, 10))
 
@@ -53,7 +53,7 @@ class SecurityAlertsPage:
             logs = self.engine.get_security_logs()
         except AttributeError:
             ctk.CTkLabel(self.logs_container, text="Backend Error: get_security_logs missing",
-                         text_color=self.red, font=(self.ui_font, 12, "bold")).pack(pady=20)
+                         text_color=self.red, font=(self.ui_font, 13, "bold")).pack(pady=20)
             return
 
         if not logs:
@@ -61,7 +61,7 @@ class SecurityAlertsPage:
             empty_frame.pack(pady=60)
             ctk.CTkLabel(empty_frame, text="🛡️", font=(self.ui_font, 36)).pack()
             ctk.CTkLabel(empty_frame, text="No security alerts detected.",
-                         text_color=self.text_muted, font=(self.ui_font, 13, "italic")).pack(pady=5)
+                         text_color=self.text_muted, font=(self.ui_font, 14, "italic")).pack(pady=5)
             return
 
         for log in logs:
@@ -75,10 +75,11 @@ class SecurityAlertsPage:
         title_col = self.text_muted if is_read else self.red
         desc_col = "#95A5A6" if is_read else self.text_dark
 
-        # 🚀 COMPACT CARD: Binawasan ang pady at margins
+        # 🚀 THE POGI FIX: Kinulong natin siya sa HEIGHT=85 at naka-propagate(False) para hindi lumobo!
         card = ctk.CTkFrame(self.logs_container, fg_color=bg_col, border_color=self.color_border,
-                            border_width=1, corner_radius=8, cursor="hand2")
-        card.pack(fill="x", pady=3, padx=10)
+                            border_width=1, corner_radius=8, cursor="hand2", height=85)
+        card.pack(fill="x", pady=4, padx=10)
+        card.pack_propagate(False)  # Hinding hindi na 'to tataba boss!
 
         # Subtle Color Strip
         ctk.CTkFrame(card, width=4, fg_color=strip_col, corner_radius=0).pack(side="left", fill="y")
@@ -88,22 +89,22 @@ class SecurityAlertsPage:
         time_str = log.get('timestamp', log.get('created_at', ''))
         display_details = re.sub(r'\[REQ_PWD:.*?\]', '', raw_details).strip()
 
-        # Right-aligned Time
+        # Right-aligned Time (Umakyat ng konti para pantay sa title)
         time_frame = ctk.CTkFrame(card, fg_color="transparent")
-        time_frame.pack(side="right", padx=15, pady=5)
-        ctk.CTkLabel(time_frame, text=f"🕒 {time_str}", font=(self.ui_font, 10, "italic"),
+        time_frame.pack(side="right", padx=15, pady=(15, 0), anchor="ne")
+
+        ctk.CTkLabel(time_frame, text=f"🕒 {time_str}", font=(self.ui_font, 12, "italic"),
                      text_color=self.text_muted).pack()
 
-        # Content Frame (Smaller padding)
+        # Content Frame
         content_frame = ctk.CTkFrame(card, fg_color="transparent", cursor="hand2")
-        content_frame.pack(fill="both", side="left", expand=True, padx=12, pady=8)
+        content_frame.pack(fill="both", side="left", expand=True, padx=15, pady=10)
 
-        # Alert Title (Size 12)
-        lbl_title = ctk.CTkLabel(content_frame, text=action, font=(self.ui_font, 12, "bold"), text_color=title_col)
-        lbl_title.pack(anchor="w")
+        # 🚀 JUMBO FONT UPDATE: Size 16 para sa Title, Size 14 para sa Description!
+        lbl_title = ctk.CTkLabel(content_frame, text=action, font=(self.ui_font, 16, "bold"), text_color=title_col)
+        lbl_title.pack(anchor="w", pady=(0, 2))
 
-        # Alert Details (Size 11)
-        lbl_details = ctk.CTkLabel(content_frame, text=display_details, font=(self.ui_font, 11),
+        lbl_details = ctk.CTkLabel(content_frame, text=display_details, font=(self.ui_font, 14),
                                    text_color=desc_col, wraplength=700, justify="left")
         lbl_details.pack(anchor="w")
 
@@ -121,15 +122,15 @@ class SecurityAlertsPage:
             child.configure(cursor="hand2")
 
     # =========================================================================
-    # THE ALERT DETAILS MODAL (Standard Poppins Design)
+    # THE ALERT DETAILS MODAL (HINDI GINALAW TULAD NG SABI MO)
     # =========================================================================
     def show_alert_details(self, log, raw_details):
         root_window = self.page_frame.winfo_toplevel()
         popup = ctk.CTkToplevel(root_window)
         popup.title("Security Report")
 
-        window_width = 550
-        window_height = 480
+        window_width = 580
+        window_height = 500
 
         # Perfect Centering
         popup.update_idletasks()
@@ -142,11 +143,11 @@ class SecurityAlertsPage:
         popup.configure(fg_color="#FDFCF6")
 
         # Header
-        header_bg = ctk.CTkFrame(popup, fg_color=self.color_sidebar, corner_radius=0, height=65)
+        header_bg = ctk.CTkFrame(popup, fg_color=self.color_sidebar, corner_radius=0, height=70)
         header_bg.pack(fill="x")
         header_bg.pack_propagate(False)
-        ctk.CTkLabel(header_bg, text="🚨 Security Incident Details", font=(self.ui_font, 18, "bold"),
-                     text_color="white").pack(pady=18)
+        ctk.CTkLabel(header_bg, text="🚨 Security Incident Details", font=(self.ui_font, 20, "bold"),
+                     text_color="white").pack(pady=20)
 
         # Info Grid
         info_frame = ctk.CTkFrame(popup, fg_color="#FFFFFF", border_color=self.color_border, border_width=1,
@@ -154,9 +155,9 @@ class SecurityAlertsPage:
         info_frame.pack(fill="both", expand=True, padx=20, pady=15)
 
         def create_grid_row(parent, row_idx, label, value, val_color=self.text_dark):
-            ctk.CTkLabel(parent, text=label, font=(self.ui_font, 11, "bold"), text_color=self.text_muted).grid(
+            ctk.CTkLabel(parent, text=label, font=(self.ui_font, 13, "bold"), text_color=self.text_muted).grid(
                 row=row_idx, column=0, sticky="w", padx=15, pady=8)
-            ctk.CTkLabel(parent, text=value, font=(self.ui_font, 11, "bold"), text_color=val_color).grid(
+            ctk.CTkLabel(parent, text=value, font=(self.ui_font, 13, "bold"), text_color=val_color).grid(
                 row=row_idx, column=1, sticky="w", padx=10, pady=8)
 
         create_grid_row(info_frame, 0, "Log Reference:", f"#{log.get('log_id', 'N/A')}")
@@ -175,12 +176,13 @@ class SecurityAlertsPage:
         create_grid_row(info_frame, 3, "Activity Type:", action, val_color=self.orange)
 
         # Narrative Box
-        ctk.CTkLabel(info_frame, text="Full Narrative:", font=(self.ui_font, 11, "bold"),
+        ctk.CTkLabel(info_frame, text="Full Narrative:", font=(self.ui_font, 13, "bold"),
                      text_color=self.text_muted).grid(row=4, column=0, sticky="nw", padx=15, pady=8)
 
         display_details = re.sub(r'\[REQ_PWD:.*?\]', '', raw_details).strip()
-        narrative_box = ctk.CTkTextbox(info_frame, height=80, fg_color="#F8F9FA", border_width=1,
-                                       border_color=self.color_border, text_color="black", font=(self.ui_font, 11))
+
+        narrative_box = ctk.CTkTextbox(info_frame, height=90, fg_color="#F8F9FA", border_width=1,
+                                       border_color=self.color_border, text_color="black", font=(self.ui_font, 13))
         narrative_box.grid(row=4, column=1, sticky="nsew", padx=10, pady=10)
         narrative_box.insert("1.0", display_details)
         narrative_box.configure(state="disabled")
@@ -193,16 +195,16 @@ class SecurityAlertsPage:
 
         if action == "PASSWORD RESET REQUEST" and log.get('is_read') == 0:
             ctk.CTkButton(btn_frame, text="✅ Approve", fg_color=self.primary, hover_color="#1E8449",
-                          font=(self.ui_font, 12, "bold"), width=130, height=38, corner_radius=8,
+                          font=(self.ui_font, 13, "bold"), width=130, height=40, corner_radius=8,
                           command=lambda: self.approve_password(log, raw_details, popup)).pack(side="left", padx=8)
 
             ctk.CTkButton(btn_frame, text="❌ Deny", fg_color="transparent", border_width=1, border_color=self.red,
-                          text_color=self.red, hover_color="#FDEDEC", font=(self.ui_font, 12, "bold"), width=100,
-                          height=38, corner_radius=8,
+                          text_color=self.red, hover_color="#FDEDEC", font=(self.ui_font, 13, "bold"), width=100,
+                          height=40, corner_radius=8,
                           command=lambda: self.deny_password(log, popup)).pack(side="left", padx=8)
         else:
             ctk.CTkButton(btn_frame, text="Close Report", fg_color=self.color_sidebar, hover_color="#2A2F6C",
-                          font=(self.ui_font, 12, "bold"), width=180, height=38, corner_radius=8,
+                          font=(self.ui_font, 13, "bold"), width=180, height=40, corner_radius=8,
                           command=popup.destroy).pack()
 
             if log.get('is_read') == 0:
