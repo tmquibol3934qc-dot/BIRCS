@@ -20,8 +20,8 @@ class ArchivesPage:
         self.text_dark = "#2C3E50"
         self.text_muted = "#7F8C8D"
 
+        # 🚀 SINGLE SOSYALIN FONT STANDARD
         self.ui_font = "Poppins"
-        self.header_font = "Poppins"
 
         self.container = ctk.CTkFrame(parent_frame, fg_color="transparent")
         self.container.pack(fill="both", expand=True)
@@ -36,7 +36,7 @@ class ArchivesPage:
         header_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         header_frame.pack(fill="x", padx=35, pady=(30, 15))
 
-        ctk.CTkLabel(header_frame, text="🗄️ Case Archives", font=(self.header_font, 26, "bold"),
+        ctk.CTkLabel(header_frame, text="🗄️ Case Archives", font=(self.ui_font, 26, "bold"),
                      text_color=self.color_sidebar).pack(side="left")
 
         # 📌 MAIN CARD CONTAINER (White Floating Card)
@@ -53,18 +53,27 @@ class ArchivesPage:
         cat_list = ["All Categories"] + self.engine.get_incident_categories()
         self.filter_category_var = ctk.StringVar(value="All Categories")
 
-        # 🚀 Safe OptionMenu (Walang borders para iwas crash!)
-        ctk.CTkOptionMenu(top_ctrls, variable=self.filter_category_var, values=cat_list, fg_color="#F8F9FA",
-                          text_color=self.text_dark, button_color=self.color_border, button_hover_color="#D5D8DC",
-                          width=180,
-                          height=38, font=(self.ui_font, 12),
-                          command=lambda e: self.trigger_live_filter(reset_page=True)).pack(side="left", padx=(0, 10))
+        # 🚀 Save dropdown reference para ma-update natin mamaya!
+        self.cat_dropdown = ctk.CTkOptionMenu(top_ctrls, variable=self.filter_category_var, values=cat_list,
+                                              fg_color="#F8F9FA", text_color=self.text_dark,
+                                              button_color=self.color_border,
+                                              button_hover_color="#D5D8DC", width=180, height=38,
+                                              font=(self.ui_font, 12),
+                                              command=lambda e: self.trigger_live_filter(reset_page=True))
+        self.cat_dropdown.pack(side="left", padx=(0, 10))
 
         self.search_entry = ctk.CTkEntry(top_ctrls, placeholder_text="Search Case ID or Name...", width=300, height=38,
                                          fg_color="#F8F9FA", border_width=1, border_color=self.color_border,
                                          text_color=self.text_dark, font=(self.ui_font, 12))
         self.search_entry.pack(side="left")
         self.search_entry.bind("<KeyRelease>", self.delayed_search)
+
+        # 🚀 THE NEW REFRESH BUTTON (Web Style)
+        self.btn_refresh = ctk.CTkButton(top_ctrls, text="🔄 Refresh", width=110, height=38, fg_color="#FFFFFF",
+                                         border_width=1, border_color=self.color_border, text_color=self.text_dark,
+                                         hover_color="#F8F9FA", font=(self.ui_font, 12, "bold"),
+                                         command=self.refresh_data)
+        self.btn_refresh.pack(side="right")
 
         # 📌 TABLE HEADER (High Contrast Navy)
         title_row = ctk.CTkFrame(table_container, fg_color=self.color_sidebar, corner_radius=0, height=45)
@@ -105,6 +114,20 @@ class ArchivesPage:
                                       font=(self.ui_font, 12, "bold"), command=lambda: self.change_page(1))
         self.btn_next.pack(side="right")
 
+        self.trigger_live_filter(reset_page=True)
+
+    # ==================================================
+    # REFRESH LOGIC (THE POGI FIX)
+    # ==================================================
+    def refresh_data(self):
+        # 1. Force a DB check if any cases need to be managed
+        self.engine.auto_manage_reopen_cases()
+
+        # 2. Silently update the Category Dropdown with fresh DB values!
+        new_cat_list = ["All Categories"] + self.engine.get_incident_categories()
+        self.cat_dropdown.configure(values=new_cat_list)
+
+        # 3. Pull fresh data for the table
         self.trigger_live_filter(reset_page=True)
 
     def delayed_search(self, event):
