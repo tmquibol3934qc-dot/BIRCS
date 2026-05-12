@@ -58,7 +58,8 @@ class OverviewPage:
                      text_color=self.color_sidebar).pack(side="left")
 
         export_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
-        export_frame.pack(side="right")
+        # 🚀 THE POGI FIX: Umatras tayo ng 80 pixels pakaliwa para hindi mabangga ang Profile Button!
+        export_frame.pack(side="right", padx=(0, 80))
 
         self.report_timeframe = ctk.StringVar(value="This Month")
         dropdown = ctk.CTkOptionMenu(export_frame, variable=self.report_timeframe,
