@@ -5,6 +5,40 @@ from tkinter import messagebox
 
 class PDFGenerator:
     @staticmethod
+    def add_official_header(pdf):
+        """🚀 POGI UPDATE: Universal Header Generator para uniform lahat ng forms!"""
+        # --- LOGO INSERTION ---
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            logo_path = os.path.join(current_dir, 'logo-removebg-preview.png')
+            if not os.path.exists(logo_path):
+                logo_path = os.path.join(current_dir, 'assets', 'logo-removebg-preview.png')
+
+            if os.path.exists(logo_path):
+                # Centered Logo (A4 width is 210mm. If logo is 25mm wide, x = (210-25)/2 = 92.5)
+                pdf.image(logo_path, x=92.5, y=10, w=25)
+                pdf.ln(28)  # Space sa ilalim ng logo
+            else:
+                pdf.ln(10)  # Fallback space kung walang logo
+        except Exception:
+            pdf.ln(10)
+
+        # --- OFFICIAL TEXT HEADER ---
+        pdf.set_font("Arial", 'B', 15)
+        pdf.cell(0, 6, txt="REPUBLIKA NG PILIPINAS", ln=True, align='C')
+
+        pdf.set_font("Arial", '', 12)
+        pdf.cell(0, 6, txt="Lungsod ng Caloocan", ln=True, align='C')
+
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(0, 6, txt="BARANGAY 176-B, BAGONG SILANG, CALOOCAN CITY", ln=True, align='C')
+
+        pdf.set_font("Arial", '', 11)
+        pdf.cell(0, 6, txt="Phase 2 Package 1, Luwalhati St., 1428", ln=True, align='C')
+
+        pdf.ln(6)  # Spacing before the title box
+
+    @staticmethod
     def export_blotter(row_data):
         try:
             from fpdf import FPDF
@@ -15,14 +49,9 @@ class PDFGenerator:
         pdf = FPDF()
         pdf.add_page()
 
-        pdf.set_font("Arial", 'B', 16)
-        pdf.cell(0, 8, txt="REPUBLIKA NG PILIPINAS", ln=True, align='C')
-        pdf.set_font("Arial", '', 12)
-        pdf.cell(0, 6, txt="Lungsod ng Caloocan", ln=True, align='C')
-        pdf.set_font("Arial", 'B', 14)
-        pdf.cell(0, 8, txt="BARANGAY 176-B BAGONG SILANG", ln=True, align='C')
+        # 🚀 CALL THE UNIVERSAL HEADER
+        PDFGenerator.add_official_header(pdf)
 
-        pdf.ln(5)
         pdf.set_font("Arial", 'B', 16)
         pdf.set_fill_color(220, 220, 220)
         pdf.cell(0, 10, txt="OFFICIAL BLOTTER REPORT", ln=True, align='C', fill=True)
@@ -110,10 +139,14 @@ class PDFGenerator:
 
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", 'B', 18)
-        pdf.cell(0, 10, txt="BARANGAY 176-B BAGONG SILANG", ln=True, align='C')
-        pdf.set_font("Arial", 'B', 14)
-        pdf.cell(0, 10, txt="Incident Analytics & Trends Report", ln=True, align='C')
+
+        # 🚀 CALL THE UNIVERSAL HEADER
+        PDFGenerator.add_official_header(pdf)
+
+        # 🚀 Ginaya ko na rin ang format ng Blotter Report Title Box para match!
+        pdf.set_font("Arial", 'B', 16)
+        pdf.set_fill_color(220, 220, 220)
+        pdf.cell(0, 10, txt="ANALYTICS & TRENDS REPORT", ln=True, align='C', fill=True)
 
         pdf.ln(5)
         pdf.set_font("Arial", 'I', 10)
