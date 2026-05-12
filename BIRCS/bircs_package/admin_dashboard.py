@@ -18,10 +18,11 @@ class AdminDashboardWindow:
         # 🎨 THE PREMIUM WEB PALETTE
         self.color_sidebar = "#1D2153"  # Deep Navy para sa Authority
         self.color_bg = "#F4F6F7"  # Very light gray/cream para lumutang ang mga white cards sa loob
-        self.color_active = "#27AE60"  # Emerald Green for Active Tab
         self.color_hover = "#2A2F6C"  # Slightly lighter navy for hover effect
         self.color_accent = "#E05D3A"  # Web Orange for highlights/alerts
-        self.text_dark = "#2B2B2B"
+        self.text_dark = "#2C3E50"
+
+        # 🚀 SINGLE FONT STANDARD
         self.ui_font = "Poppins"
 
         self.window.configure(fg_color=self.color_bg)
@@ -37,7 +38,6 @@ class AdminDashboardWindow:
         self.window.protocol("WM_DELETE_WINDOW", self.force_logout_on_close)
 
         self.setup_layout()
-        # Matic load ang Analytics pag-open!
         self.show_analytics_dashboard()
 
     def setup_layout(self):
@@ -60,16 +60,12 @@ class AdminDashboardWindow:
             if os.path.exists(logo_path):
                 logo_img = Image.open(logo_path)
                 ctk_logo = ctk.CTkImage(light_image=logo_img, dark_image=logo_img, size=(70, 70))
-
-                logo_label = ctk.CTkLabel(logo_frame, text="", image=ctk_logo)
-                logo_label.pack(anchor="center", pady=(0, 5))
+                ctk.CTkLabel(logo_frame, text="", image=ctk_logo).pack(anchor="center", pady=(0, 5))
             else:
-                ctk.CTkLabel(logo_frame, text="BICRS", font=("Young Serif", 24, "bold"), text_color="white").pack(
+                ctk.CTkLabel(logo_frame, text="BICRS", font=(self.ui_font, 28, "bold"), text_color="white").pack(
                     anchor="center")
-
-        except Exception as e:
-            print(f"Error loading logo: {e}")
-            ctk.CTkLabel(logo_frame, text="BICRS", font=("Young Serif", 24, "bold"), text_color="white").pack(
+        except Exception:
+            ctk.CTkLabel(logo_frame, text="BICRS", font=(self.ui_font, 28, "bold"), text_color="white").pack(
                 anchor="center")
 
         # --- USER PROFILE AREA ---
@@ -88,15 +84,14 @@ class AdminDashboardWindow:
         ctk.CTkFrame(self.sidebar, height=1, fg_color="#2A2F6C").pack(fill="x", padx=20, pady=(0, 20))
 
         # --- NAVIGATION PILLS ---
-        # 🚀 POGI UPDATE: Ginamit ko ang "corner_radius=8" para magmukhang pill buttons imbes na flat blocks!
         btn_args = {
-            "font": (self.ui_font, 13),
+            "font": (self.ui_font, 13, "bold"),
             "fg_color": "transparent",
             "text_color": "white",
             "hover_color": self.color_hover,
             "anchor": "w",
             "corner_radius": 8,
-            "height": 40
+            "height": 42
         }
 
         self.btn_analytics = ctk.CTkButton(self.sidebar, text="   📊   Analytics", command=self.show_analytics_dashboard,
@@ -116,8 +111,7 @@ class AdminDashboardWindow:
 
         self.btn_alerts = ctk.CTkButton(self.sidebar, text="   🚨   Security Alerts", command=self.show_security_alerts,
                                         **btn_args)
-        # Accent kulay para sa alerts (Orange)
-        self.btn_alerts.configure(text_color=self.color_accent)
+        self.btn_alerts.configure(text_color=self.color_accent)  # Orange accent
         self.btn_alerts.pack(fill="x", padx=20, pady=4)
 
         self.btn_maintenance = ctk.CTkButton(self.sidebar, text="   ⚙️   Maintenance",
@@ -128,9 +122,11 @@ class AdminDashboardWindow:
         ctk.CTkFrame(self.sidebar, height=1, fg_color="#2A2F6C").pack(side="bottom", fill="x", padx=20, pady=(0, 70))
 
         ctk.CTkButton(self.sidebar, text="   🚪   Lock & Exit Admin", font=(self.ui_font, 12, "bold"),
-                      fg_color="transparent", text_color="#E74C3C", hover_color="#34495E",
-                      anchor="w", corner_radius=8, height=40, command=self.lock_and_exit).pack(side="bottom", fill="x",
-                                                                                               padx=20, pady=15)
+                      fg_color="transparent", border_width=1, border_color="#E74C3C", text_color="#E74C3C",
+                      hover_color="#FDEDEC",
+                      anchor="center", corner_radius=8, height=40, command=self.lock_and_exit).pack(side="bottom",
+                                                                                                    fill="x", padx=20,
+                                                                                                    pady=15)
 
         # --- MAIN CANVAS ---
         self.main_frame = ctk.CTkFrame(self.window, fg_color="transparent")
@@ -141,18 +137,44 @@ class AdminDashboardWindow:
             widget.destroy()
 
     def set_active_tab(self, tab_name):
-        # 🚀 POGI UPDATE: Active state turns Green, inactive stays transparent!
+        # 🚀 POGI UPDATE: Active state turns WHITE, text turns NAVY BLUE! (Except Alerts)
         default_fg = "transparent"
-        self.btn_analytics.configure(fg_color=self.color_active if tab_name == "analytics" else default_fg)
-        self.btn_archives.configure(fg_color=self.color_active if tab_name == "archives" else default_fg)
-        self.btn_team.configure(fg_color=self.color_active if tab_name == "users" else default_fg)
-        self.btn_logs.configure(fg_color=self.color_active if tab_name == "logs" else default_fg)
+        default_tc = "white"
+        active_fg = "white"
+        active_tc = self.color_sidebar
 
-        # Ang alerts ay mag-o-orange pag active para consistent sa warning theme
-        self.btn_alerts.configure(fg_color=self.color_accent if tab_name == "alerts" else default_fg,
-                                  text_color="white" if tab_name == "alerts" else self.color_accent)
+        self.btn_analytics.configure(
+            fg_color=active_fg if tab_name == "analytics" else default_fg,
+            text_color=active_tc if tab_name == "analytics" else default_tc,
+            hover_color="#F8F9FA" if tab_name == "analytics" else self.color_hover
+        )
+        self.btn_archives.configure(
+            fg_color=active_fg if tab_name == "archives" else default_fg,
+            text_color=active_tc if tab_name == "archives" else default_tc,
+            hover_color="#F8F9FA" if tab_name == "archives" else self.color_hover
+        )
+        self.btn_team.configure(
+            fg_color=active_fg if tab_name == "users" else default_fg,
+            text_color=active_tc if tab_name == "users" else default_tc,
+            hover_color="#F8F9FA" if tab_name == "users" else self.color_hover
+        )
+        self.btn_logs.configure(
+            fg_color=active_fg if tab_name == "logs" else default_fg,
+            text_color=active_tc if tab_name == "logs" else default_tc,
+            hover_color="#F8F9FA" if tab_name == "logs" else self.color_hover
+        )
+        self.btn_maintenance.configure(
+            fg_color=active_fg if tab_name == "maintenance" else default_fg,
+            text_color=active_tc if tab_name == "maintenance" else default_tc,
+            hover_color="#F8F9FA" if tab_name == "maintenance" else self.color_hover
+        )
 
-        self.btn_maintenance.configure(fg_color=self.color_active if tab_name == "maintenance" else default_fg)
+        # Alerts has a special Orange/White theme
+        self.btn_alerts.configure(
+            fg_color=active_fg if tab_name == "alerts" else default_fg,
+            text_color=self.color_accent,  # Always keep it orange to show urgency
+            hover_color="#F8F9FA" if tab_name == "alerts" else self.color_hover
+        )
 
     # ==========================================
     # ROUTING PAGES
@@ -245,7 +267,8 @@ class AdminDashboardWindow:
     # SYSTEM CONTROLS
     # ==========================================
     def lock_and_exit(self):
-        if messagebox.askyesno("Confirm Exit", "Are you sure you want to lock the Admin Dashboard and log out?"):
+        if messagebox.askyesno("Confirm Exit", "Are you sure you want to lock the Admin Dashboard and log out?",
+                               parent=self.window):
             if hasattr(self, 'audit_id'):
                 self.engine.log_user_logout(self.audit_id)
             self.window.destroy()
