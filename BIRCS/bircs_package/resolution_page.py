@@ -24,8 +24,10 @@ class ResolutionPage:
         # 🚀 SINGLE SOSYALIN FONT STANDARD
         self.ui_font = "Poppins"
 
+        self.all_pending_cases = []  # Imbak natin dito lahat ng data para sa search
+
         self.setup_ui()
-        self.load_pending_cases()
+        self.fetch_pending_cases()
 
     def setup_ui(self):
         self.main_container = ctk.CTkFrame(self.parent, fg_color="transparent")
@@ -38,15 +40,29 @@ class ResolutionPage:
         self.left_panel.pack_propagate(False)
 
         header_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
-        header_frame.pack(fill="x", pady=(20, 10), padx=20)
+        header_frame.pack(fill="x", pady=(20, 5), padx=20)
 
         ctk.CTkLabel(header_frame, text="My Pending Cases", font=(self.ui_font, 18, "bold"),
                      text_color=self.color_sidebar).pack(side="left")
 
-        ctk.CTkButton(header_frame, text="🔄", width=35, height=35, fg_color="#F8F9FA", border_width=1,
-                      border_color=self.color_border,
-                      text_color="black", hover_color="#EAECEE", font=(self.ui_font, 14),
-                      command=self.load_pending_cases).pack(side="right")
+        ctk.CTkButton(header_frame, text="🔄", width=32, height=32, fg_color="#F8F9FA", border_width=1,
+                      border_color=self.color_border, text_color="black", hover_color="#EAECEE",
+                      font=(self.ui_font, 14),
+                      command=self.fetch_pending_cases).pack(side="right")
+
+        # 🚀 POGI UPDATE: Real-time Search Bar with clear example!
+        search_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        search_frame.pack(fill="x", padx=20, pady=(0, 10))
+
+        self.search_var = ctk.StringVar()
+        self.search_var.trace_add("write", self.filter_cases)  # Eto nagpapagana niyan automatically!
+
+        # Dito natin pinalitan yung placeholder text!
+        self.search_entry = ctk.CTkEntry(search_frame, textvariable=self.search_var,
+                                         placeholder_text="Search Name or Case # (e.g., 2026-034)",
+                                         height=36, font=(self.ui_font, 11), fg_color="#F8F9FA", border_width=1,
+                                         border_color=self.color_border, text_color=self.text_dark)
+        self.search_entry.pack(fill="x", expand=True)
 
         self.case_list_frame = ctk.CTkScrollableFrame(self.left_panel, fg_color="transparent")
         self.case_list_frame.pack(fill="both", expand=True, padx=10, pady=5)
@@ -63,26 +79,54 @@ class ResolutionPage:
         self.details_frame = ctk.CTkScrollableFrame(self.right_panel, fg_color="transparent")
         self.details_frame.pack(fill="both", expand=True, padx=30, pady=10)
 
-    def load_pending_cases(self):
-        for widget in self.case_list_frame.winfo_children(): widget.destroy()
+    # ==================================================
+    # LOGIC: FETCH & SEARCH CASES
+    # ==================================================
+    def fetch_pending_cases(self):
+        """Kinukuha lahat ng data sa database at sine-save sa memory para sa mabilis na search."""
         officer_name = f"{self.user.get('first_name', '')} {self.user.get('last_name', '')}".strip()
         role = self.user.get('role', 'Staff')
 
         my_incidents = self.engine.get_my_pending_cases(officer_name, role)
-        self.pending_incidents = [inc for inc in my_incidents if inc.get('status') in ['Pending', 'Urgent']]
+        self.all_pending_cases = [inc for inc in my_incidents if inc.get('status') in ['Pending', 'Urgent']]
 
-        if not self.pending_incidents:
-            ctk.CTkLabel(self.case_list_frame, text="📭 No pending cases\nassigned to you.",
-                         font=(self.ui_font, 14, "italic"),
-                         text_color=self.text_muted).pack(pady=60)
+        # Trigger ang filter para mag-render
+        self.filter_cases()
+
+    def filter_cases(self, *args):
+        """Sinasala yung listahan base sa tinype sa search box (Real-time)."""
+        query = self.search_var.get().lower().strip()
+
+        if not query:
+            self.render_cases(self.all_pending_cases)
+        else:
+            filtered_data = []
+            for case in self.all_pending_cases:
+                case_no = str(case.get('case_no', '')).lower()
+                comp_name = str(case.get('complainant_name', '')).lower()
+
+                # Check kung match sa pangalan or case number
+                if query in case_no or query in comp_name:
+                    filtered_data.append(case)
+
+            self.render_cases(filtered_data)
+
+    def render_cases(self, cases_to_draw):
+        """Ito yung magda-draw ng cards na POGI at HINDI OVERSIZED."""
+        for widget in self.case_list_frame.winfo_children(): widget.destroy()
+
+        if not cases_to_draw:
+            ctk.CTkLabel(self.case_list_frame, text="📭 No cases found.",
+                         font=(self.ui_font, 13, "italic"),
+                         text_color=self.text_muted).pack(pady=50)
             return
 
-        for case in self.pending_incidents:
-            # Subtle web card style
+        for case in cases_to_draw:
+            # 🚀 THE FIX: May HEIGHT na siya (75) at naka pack_propagate(False) para hindi lumapad!
             card = ctk.CTkFrame(self.case_list_frame, fg_color="#FDFCF6", border_color=self.color_border,
-                                border_width=1,
-                                corner_radius=8, cursor="hand2")
-            card.pack(fill="x", pady=6, padx=5)
+                                border_width=1, corner_radius=8, cursor="hand2", height=75)
+            card.pack(fill="x", pady=5, padx=5)
+            card.pack_propagate(False)
 
             # Color Strip
             strip_color = self.red if case.get('status') == 'Urgent' else self.primary
@@ -90,11 +134,11 @@ class ResolutionPage:
 
             # Content
             content = ctk.CTkFrame(card, fg_color="transparent")
-            content.pack(fill="both", expand=True, padx=15, pady=10)
+            content.pack(fill="both", expand=True, padx=12, pady=10)
 
-            ctk.CTkLabel(content, text=f"Case #{case.get('case_no')}", font=(self.ui_font, 14, "bold"),
+            ctk.CTkLabel(content, text=f"Case #{case.get('case_no')}", font=(self.ui_font, 13, "bold"),
                          text_color=self.color_sidebar).pack(anchor="w")
-            ctk.CTkLabel(content, text=case.get('complainant_name'), font=(self.ui_font, 12),
+            ctk.CTkLabel(content, text=case.get('complainant_name'), font=(self.ui_font, 11),
                          text_color=self.text_dark).pack(anchor="w")
 
             # Bindings
@@ -104,18 +148,20 @@ class ResolutionPage:
             for child in content.winfo_children():
                 child.bind("<Button-1>", click_cmd)
 
+    # ==================================================
+    # LOGIC: SHOW CASE DETAILS & RESOLVE
+    # ==================================================
     def show_case_details(self, case):
         self.selected_case = case
         self.form_header.configure(text=f"📋 Resolving Case #{case.get('case_no')}", text_color=self.color_sidebar)
         for widget in self.details_frame.winfo_children(): widget.destroy()
 
-        # 🚀 THE CATEGORY BADGE (Para makita agad ni User!)
+        # Category Badge
         cat_frame = ctk.CTkFrame(self.details_frame, fg_color="#FDEDEC", corner_radius=8, border_color="#F5B7B1",
                                  border_width=1)
         cat_frame.pack(anchor="w", pady=(0, 15))
         ctk.CTkLabel(cat_frame, text=f"Category: {case.get('category', 'Uncategorized').upper()}",
-                     font=(self.ui_font, 11, "bold"),
-                     text_color=self.orange).pack(padx=15, pady=6)
+                     font=(self.ui_font, 11, "bold"), text_color=self.orange).pack(padx=15, pady=6)
 
         # INFO BOX
         info_frame = ctk.CTkFrame(self.details_frame, fg_color=self.soft_blue, corner_radius=10,
@@ -128,9 +174,8 @@ class ResolutionPage:
                      text_color=self.color_sidebar).grid(row=1, column=0, sticky="w", padx=20, pady=5)
 
         ctk.CTkLabel(info_frame, text=f"Sworn Statement:\n{case.get('narrative')}", font=(self.ui_font, 13),
-                     wraplength=700,
-                     justify="left", text_color=self.text_dark).grid(row=2, column=0, sticky="w", padx=20,
-                                                                     pady=(10, 20))
+                     wraplength=700, justify="left", text_color=self.text_dark).grid(row=2, column=0, sticky="w",
+                                                                                     padx=20, pady=(10, 20))
 
         # REOPEN LOGIC
         if case.get('reopen_status') == 'Approved':
@@ -162,8 +207,7 @@ class ResolutionPage:
 
         # AI SUGGESTIONS HEADER
         ctk.CTkLabel(self.details_frame, text="✨ AI Smart Suggestions (Historical Match)",
-                     font=(self.ui_font, 13, "bold"),
-                     text_color=self.primary).pack(anchor="w", pady=(25, 5))
+                     font=(self.ui_font, 13, "bold"), text_color=self.primary).pack(anchor="w", pady=(25, 5))
 
         self.suggestion_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
         self.suggestion_frame.pack(fill="x")
@@ -197,8 +241,7 @@ class ResolutionPage:
                 badge_color = self.red
 
             card = ctk.CTkFrame(self.suggestion_frame, fg_color="#FFFFFF", border_color=self.color_border,
-                                border_width=1,
-                                corner_radius=8, cursor="hand2")
+                                border_width=1, corner_radius=8, cursor="hand2")
             card.pack(fill="x", pady=6)
 
             click_cmd = lambda e, t=item['text']: self.insert_ai_suggestion(t)
@@ -209,8 +252,7 @@ class ResolutionPage:
             top_row.bind("<Button-1>", click_cmd)
 
             ctk.CTkLabel(top_row, text="💡 AI Suggestion", font=(self.ui_font, 12, "bold"),
-                         text_color=self.color_sidebar,
-                         cursor="hand2").pack(side="left")
+                         text_color=self.color_sidebar, cursor="hand2").pack(side="left")
 
             badge = ctk.CTkLabel(top_row, text=f"{match_percentage}% Match", font=(self.ui_font, 11, "bold"),
                                  fg_color=badge_color, text_color="white", width=80, height=26, corner_radius=13,
@@ -251,6 +293,8 @@ class ResolutionPage:
                                 parent=self.parent.winfo_toplevel())
             self.form_header.configure(text="Select a case from the left to resolve", text_color=self.text_muted)
             for widget in self.details_frame.winfo_children(): widget.destroy()
-            self.load_pending_cases()
+
+            # 🚀 POGI UPDATE: Refreshes the list properly!
+            self.fetch_pending_cases()
         else:
             messagebox.showerror("Database Error", "Failed to save resolution.", parent=self.parent.winfo_toplevel())
